@@ -1,0 +1,148 @@
+name: deploy-test
+
+# 手动触发，基于 helm chart 部署到测试 VKE（集群内 gitea runner 执行）。
+# 需填入完整镜像名（含 tag）。
+#
+# 认证：scoped kubeconfig（least-privilege）。凭据来自受限 SA invite-activity-deployer，
+#   权限被 Role 限死在 growth ns + 本 chart 资源；打包成 kubeconfig 存为 Gitea secret
+#   KUBE_CONFIG_TEST（仅本仓库 workflow 可读）。生成方式见 docs/deploy-test-workflow.md。
+#
+# 前置（一次性，见 docs/deploy-test-workflow.md）：
+#   1. kubectl apply -f deploy/test-deployer-rbac.yaml
+#   2. 为该 SA 签长期 token、拼 kubeconfig，base64 后存为 Gitea secret KUBE_CONFIG_TEST
+#   3. CR 镜像 infra/helm-kubectl:3.16（含 git + helm + kubectl）
+#   4. growth ns 里 sealed/test.sealedsecret.yaml 与 goodnotes-app-beta.cn-tls 已就绪
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "完整镜像名（含 tag），如 goodnotes-cn-cn-shanghai.cr.volces.com/web/goodnotes-invite-activity:v1.0-20260707a"
+        required: true
+        type: string
+
+env:
+  NAMESPACE: growth
+  RELEASE: invite-activity
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container:
+      image: goodnotes-cn-cn-shanghai.cr.volces.com/infra/helm-kubectl:3.16
+
+    steps:
+      # actions/checkout 依赖 github.com，在 CN 网不稳定，改为直接从内部 Gitea clone
+      - name: Checkout (internal clone)
+        env:
+          GITEA_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch "${{ github.ref_name }}" \
+            "https://token:${GITEA_TOKEN}@git-corp.goodnotes-app-beta.cn/${{ github.repository }}.git" .
+          git log -1 --oneline
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_TEST }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+          kubectl -n "$NAMESPACE" get deploy "$RELEASE" >/dev/null 2>&1 \
+            && echo "已连通集群，release 已存在" || echo "已连通集群，release 尚不存在（将首次安装）"
+
+      - name: Parse image
+        run: |
+          IMAGE="${{ inputs.image }}"
+          REPO="${IMAGE%:*}"
+          TAG="${IMAGE##*:}"
+          if [ "$REPO" = "$IMAGE" ] || [ -z "$TAG" ]; then
+            echo "❌ 镜像名必须包含 tag（形如 <repo>:<tag>），实际: $IMAGE"
+            exit 1
+          fi
+          echo "IMAGE_REPO=$REPO" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "将部署 repo=$REPO tag=$TAG"
+
+      - name: Helm upgrade --install
+        run: |
+          cd charts/invite-activity
+          # 重定向而非管道，保留 helm 退出码（sh 无 pipefail）；再提取 REVISION
+          helm upgrade --install "$RELEASE" . \
+            -n "$NAMESPACE" \
+            -f values-test.yaml \
+            --set image.repository="$IMAGE_REPO" \
+            --set image.tag="$IMAGE_TAG" \
+            --wait --timeout 5m > /tmp/helm.out 2>&1 || { cat /tmp/helm.out; exit 1; }
+          cat /tmp/helm.out
+          REV="$(grep -m1 '^REVISION:' /tmp/helm.out | awk '{print $2}')"
+          echo "REVISION=$REV" >> "$GITHUB_ENV"
+
+      - name: Rollout status
+        run: |
+          kubectl -n "$NAMESPACE" rollout status deploy/"$RELEASE" --timeout=300s
+          kubectl -n "$NAMESPACE" get pods -l app="$RELEASE" -o wide
+
+      # 写 Job Summary（Gitea 会渲染在本次 run 页面），成功/失败都写
+      - name: Job summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then ICON="✅ 成功"; else ICON="❌ ${{ job.status }}"; fi
+          SUMMARY="${GITHUB_STEP_SUMMARY:-/tmp/summary.md}"
+          {
+            echo "## 🚀 邀请活动 · 测试环境部署"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 状态 | $ICON |"
+            echo "| 镜像 | \`${{ inputs.image }}\` |"
+            echo "| Namespace | \`$NAMESPACE\` |"
+            echo "| Release | \`$RELEASE\` |"
+            echo "| Helm revision | ${REVISION:-—} |"
+            echo "| 触发人 | ${{ github.actor }} |"
+            echo ""
+            echo "### Pods"
+            echo ""
+            echo '```'
+            kubectl -n "$NAMESPACE" get pods -l app="$RELEASE" -o wide 2>&1 || echo "(无法获取 pods)"
+            echo '```'
+          } | tee -a "$SUMMARY"
+          # tee：既写 $GITHUB_STEP_SUMMARY（Gitea 支持则渲染成面板），也打到 run 日志（一定可见）
+
+      # 部署结果通知飞书群机器人（webhook 存于 repo 变量 LARK_WEBHOOK）。
+      # if: always()：成功/失败都发；成功卡片附登记页入口 + 访问范围提示。
+      - name: Notify Lark
+        if: always()
+        env:
+          WEBHOOK: ${{ vars.LARK_WEBHOOK }}
+        run: |
+          STATUS="${{ job.status }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}"
+          if [ "$STATUS" = "success" ]; then
+            COLOR=green; TITLE="🚀 测试部署 · 成功"
+            # 成功才给访问入口：登记页按钮 + 访问范围提示（note）
+            ACCESS=',{ "tag": "action", "actions": [ { "tag": "button", "text": { "tag": "plain_text", "content": "访问测试环境地址" }, "url": "https://invite.goodnotes-app-beta.cn", "type": "primary" } ] },{ "tag": "note", "elements": [ { "tag": "lark_md", "content": "⚠️ 该地址仅在 **办公网** 或 **飞连 VPN** 环境下可访问" } ] }'
+          else
+            COLOR=red; TITLE="🚀 测试部署 · 失败（$STATUS）"; ACCESS=""
+          fi
+          cat > /tmp/lark.json <<EOF
+          {
+            "msg_type": "interactive",
+            "card": {
+              "config": { "wide_screen_mode": true },
+              "header": {
+                "template": "$COLOR",
+                "title": { "tag": "plain_text", "content": "$TITLE" }
+              },
+              "elements": [
+                { "tag": "div", "text": { "tag": "lark_md", "content": "**镜像**\n${{ inputs.image }}" } },
+                { "tag": "div", "fields": [
+                  { "is_short": true, "text": { "tag": "lark_md", "content": "**Namespace**\n$NAMESPACE" } },
+                  { "is_short": true, "text": { "tag": "lark_md", "content": "**Release**\n$RELEASE" } },
+                  { "is_short": true, "text": { "tag": "lark_md", "content": "**Helm Revision**\n${REVISION:-—}" } }
+                ] }$ACCESS,
+                { "tag": "hr" },
+                { "tag": "note", "elements": [ { "tag": "lark_md", "content": "deploy-test · 触发人 ${{ github.actor }} · <font color='blue'>[Run #${{ github.run_number }}]($RUN_URL)</font>" } ] }
+              ]
+            }
+          }
+          EOF
+          curl -sS -X POST "$WEBHOOK" -H 'Content-Type: application/json' -d @/tmp/lark.json \
+            || echo "⚠️ Lark 通知发送失败（不影响部署结果）"

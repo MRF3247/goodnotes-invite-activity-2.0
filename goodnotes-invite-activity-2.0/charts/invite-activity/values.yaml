@@ -1,0 +1,56 @@
+# 默认值对齐 prod / growth 惯例（与 redeem 同 namespace、同通配证书、同 storageClass）。
+# 密钥（adminToken / secret）不在这里 —— 见 seal.sh 与 values-prod.local.yaml.example。
+
+nameOverride: ""
+fullnameOverride: "invite-activity"
+
+# 目标 namespace。SealedSecret 密文绑定该 ns，改动需重新 seal。
+namespace: growth
+
+image:
+  repository: goodnotes-cn-cn-shanghai.cr.volces.com/web/goodnotes-invite-activity
+  tag: "v1.0-20260707a"
+  pullPolicy: IfNotPresent
+
+# 容器监听端口，必须与 config.json 里的 port 一致
+containerPort: 3210
+
+service:
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: invite.goodnotes-app.cn
+  # 复用 goodnotes-app.cn 通配证书（需先从 goodnotes-prod ns 拷一份到本 ns）
+  tlsSecretName: goodnotes-app.cn-tls
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 4m
+
+# SQLite 单文件写 + 进程内定时任务 —— 只能单副本、只能 Recreate。切勿改成多副本/RollingUpdate。
+persistence:
+  enabled: true
+  storageClassName: ebs-ssd
+  accessMode: ReadWriteOnce
+  size: 20Gi
+  mountPath: /data
+
+# config.json 由 SealedSecret 提供（seal.sh 生成 sealed/<ns>.sealedsecret.yaml）。
+# 这里只声明引用的 Secret 名与键；helm 不负责创建它，部署前先 kubectl apply 密文。
+config:
+  secretName: invite-activity-config
+  key: config.json
+  mountPath: /app/config.json
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# app 无 /healthz，探针打 GET /（返回 index.html 200）
+probes:
+  path: /

@@ -1,0 +1,8 @@
+{
+  "port": 3210,
+  "adminToken": "部署时生成：node -e \"console.log(require('crypto').randomBytes(24).toString('base64url'))\"",
+  "secret": "部署时生成：node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+  "dataDir": "./data",
+  "apiBaseUrl": "生产接口基地址，如 https://xxx（由后端/运维提供）",
+  "adminReadKey": "留空；生产由 k8s Secret 注入环境变量 ADMIN_READ_KEY，代码优先读环境变量"
+}

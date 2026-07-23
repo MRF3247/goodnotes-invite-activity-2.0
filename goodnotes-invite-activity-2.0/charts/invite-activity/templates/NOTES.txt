@@ -1,0 +1,19 @@
+invite-activity 已部署到 namespace: {{ .Values.namespace }}
+
+  镜像:  {{ .Values.image.repository }}:{{ .Values.image.tag }}
+  副本:  1（Recreate —— 有状态，切勿扩副本）
+  数据:  PVC {{ include "invite-activity.fullname" . }}-data → {{ .Values.persistence.mountPath }}（{{ .Values.persistence.size }} {{ .Values.persistence.storageClassName }}）
+{{- if .Values.ingress.enabled }}
+  访问:  https://{{ .Values.ingress.host }}/          （登记页）
+         https://{{ .Values.ingress.host }}/leaderboard （排行榜）
+         https://{{ .Values.ingress.host }}/admin        （后台，需 adminToken）
+{{- end }}
+
+前置依赖（helm 不负责，需先就位）：
+  1) config 密钥：kubectl apply -f charts/invite-activity/sealed/<env>.sealedsecret.yaml
+     （由 ./seal.sh <test|prod> 生成，产出 Secret「{{ .Values.config.secretName }}」，含 {{ .Values.config.key }}）
+  2) TLS 证书：Secret「{{ .Values.ingress.tlsSecretName }}」需存在于本 ns（从其他 ns 拷贝通配证书）
+
+排查：
+  kubectl -n {{ .Values.namespace }} get pod,svc,ingress,pvc -l app={{ include "invite-activity.name" . }}
+  kubectl -n {{ .Values.namespace }} logs deploy/{{ include "invite-activity.fullname" . }}

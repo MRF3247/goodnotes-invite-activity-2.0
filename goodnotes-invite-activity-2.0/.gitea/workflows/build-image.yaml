@@ -1,0 +1,117 @@
+name: build-image
+
+# push v* 标签时自动构建，或手动触发。镜像 tag 自动生成为「提交日期-shortsha」。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  REGISTRY: goodnotes-cn-cn-shanghai.cr.volces.com
+  IMAGE: goodnotes-cn-cn-shanghai.cr.volces.com/web/goodnotes-invite-activity
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # CI 用镜像（node + git + docker CLI）。act 既不 honor workflow 的 --network host，
+    # 也不应用 bind volume（默认 valid_volumes 为空），所以到不了 dind 的 localhost:2375、
+    # 也挂不进 docker.sock。解法：job 容器跑在 act 自建 bridge 网上，其默认网关就是 dind
+    # （dockerd 监听 0.0.0.0:2375），运行时探测网关拼出 DOCKER_HOST（见下方 step）。
+    container:
+      image: goodnotes-cn-cn-shanghai.cr.volces.com/infra/ci-node-docker:22
+
+    steps:
+      # actions/checkout 依赖 github.com，在 CN 网不稳定，改为直接从内部 Gitea clone
+      - name: Checkout (internal clone)
+        env:
+          GITEA_TOKEN: ${{ github.token }}
+        run: |
+          git clone --depth 1 --branch "${{ github.ref_name }}" \
+            "https://token:${GITEA_TOKEN}@git-corp.goodnotes-app-beta.cn/${{ github.repository }}.git" .
+          git log -1 --oneline
+
+      # 采集 commit 信息供飞书卡片使用（放在最前，构建失败也能带上）
+      - name: Capture git info
+        run: |
+          echo "GIT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          echo "GIT_SUBJECT=$(git log -1 --pretty=%s)" >> "$GITHUB_ENV"
+          echo "GIT_AUTHOR=$(git log -1 --pretty=%an)" >> "$GITHUB_ENV"
+
+      # act 的 job 容器默认路由网关 = dind（同 pod 的 dind sidecar，dockerd 监听
+      # 0.0.0.0:2375）。镜像里无 ip/net-tools，用 node 从 /proc/net/route 解析网关。
+      - name: Point DOCKER_HOST at dind (default-route gateway)
+        run: |
+          GW=$(node -e 'const fs=require("fs");for(const l of fs.readFileSync("/proc/net/route","utf8").split("\n").slice(1)){const f=l.trim().split(/\s+/);if(f[1]==="00000000"){console.log([6,4,2,0].map(i=>parseInt(f[2].substr(i,2),16)).join("."));break;}}')
+          echo "dind gateway: $GW"
+          echo "DOCKER_HOST=tcp://$GW:2375" >> "$GITHUB_ENV"
+
+      - name: Login to Volcengine CR
+        run: |
+          echo "${{ secrets.CR_PASSWORD }}" \
+            | docker login "$REGISTRY" -u "${{ secrets.CR_USERNAME }}" --password-stdin
+
+      - name: Build image
+        run: |
+          SHA="$(git rev-parse --short HEAD)"
+          # 用「提交日期」而非构建日期：同一 commit 重建得到相同 tag，不产生重复
+          CDATE="$(git show -s --format=%cd --date=format:%Y%m%d HEAD)"
+          TAG="$CDATE-$SHA"                     # 例：20260707-c3e0f2d
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          docker build --platform linux/amd64 \
+            -t "$IMAGE:$TAG" \
+            .
+
+      - name: Push image
+        run: |
+          docker push "$IMAGE:$TAG"
+          PUSHED="$TAG"
+          # push v* 标签（release）：额外推 release 版本号（git tag 名）
+          if [ "${{ github.event_name }}" = "push" ]; then
+            docker tag "$IMAGE:$TAG" "$IMAGE:${{ github.ref_name }}"
+            docker push "$IMAGE:${{ github.ref_name }}"
+            PUSHED="$PUSHED, ${{ github.ref_name }}"
+          fi
+          echo "Pushed: $IMAGE :{$PUSHED}"
+
+      # 构建结果通知飞书群机器人（与 deploy-test 共用 repo 变量 LARK_WEBHOOK）。
+      # 用 node 拼卡片（JSON.stringify 安全转义 commit message）并经 fetch 发送。
+      - name: Notify Lark
+        if: always()
+        env:
+          WEBHOOK: ${{ vars.LARK_WEBHOOK }}
+          STATUS: ${{ job.status }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          node -e '(async () => {
+            var e = process.env;
+            var q = String.fromCharCode(39);
+            var blueLink = function (t, u) { return "<font color=" + q + "blue" + q + ">[" + t + "](" + u + ")</font>"; };
+            var ok = e.STATUS === "success";
+            var base = e.SERVER_URL + "/" + e.REPO;
+            var runUrl = base + "/actions/runs/" + e.RUN_NUMBER;
+            var image = (e.IMAGE || "") + ":" + (e.TAG || "(未构建)");
+            var commit = e.GIT_SHA ? blueLink(e.GIT_SHA, base + "/commit/" + e.GIT_SHA) : "-";
+            var elements = [
+              { tag: "div", text: { tag: "lark_md", content: "**镜像**\n" + image } },
+              { tag: "div", fields: [
+                { is_short: true, text: { tag: "lark_md", content: "**Commit**\n" + commit } },
+                { is_short: true, text: { tag: "lark_md", content: "**作者**\n" + (e.GIT_AUTHOR || "-") } }
+              ] },
+              { tag: "div", text: { tag: "lark_md", content: "**说明**\n" + (e.GIT_SUBJECT || "-") } },
+              { tag: "hr" },
+              { tag: "note", elements: [ { tag: "lark_md", content: "build-image · 触发人 " + (e.ACTOR || "-") + " · " + blueLink("Run #" + e.RUN_NUMBER, runUrl) } ] }
+            ];
+            var card = { msg_type: "interactive", card: {
+              config: { wide_screen_mode: true },
+              header: {
+                template: ok ? "green" : "red",
+                title: { tag: "plain_text", content: ok ? "📦 镜像构建 · 成功" : "📦 镜像构建 · 失败（" + e.STATUS + "）" }
+              },
+              elements: elements } };
+            var res = await fetch(e.WEBHOOK, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(card) });
+            console.log("lark:", res.status, await res.text());
+          })().catch(function (err) { console.log("notify failed:", err.message); });'

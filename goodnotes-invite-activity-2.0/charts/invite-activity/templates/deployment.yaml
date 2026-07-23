@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "invite-activity.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "invite-activity.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    # SQLite 单文件写 + 进程内每日刷榜任务：禁止两副本共存，更新先停旧再起新
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "invite-activity.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "invite-activity.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ include "invite-activity.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+            - name: config
+              mountPath: {{ .Values.config.mountPath }}
+              subPath: {{ .Values.config.key }}
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: {{ .Values.probes.path | quote }}, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: {{ .Values.probes.path | quote }}, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "invite-activity.fullname" . }}-data
+        - name: config
+          secret:
+            secretName: {{ .Values.config.secretName }}
+            items:
+              - key: {{ .Values.config.key }}
+                path: {{ .Values.config.key }}

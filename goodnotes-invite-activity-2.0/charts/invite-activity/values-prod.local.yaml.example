@@ -1,0 +1,13 @@
+# 明文密钥源，仅供 seal.sh 读取生成 SealedSecret。
+# 用法：复制为 values-prod.local.yaml（已被 .gitignore 忽略），填入真实值后运行 ./seal.sh。
+#
+# 生成随机值：
+#   adminToken:  node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+#   secret:      node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#
+# 这些字段会被渲染成 config.json，port/dataDir 必须与 chart values 一致（3210 / /data）。
+config:
+  port: 3210
+  dataDir: /data
+  adminToken: "REPLACE_ME_admin_token"
+  secret: "REPLACE_ME_signing_secret"

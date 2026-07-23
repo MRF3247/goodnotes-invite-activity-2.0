@@ -1,0 +1,17 @@
+# 测试环境覆盖值（测试 VKE，namespace growth）。与 values.yaml 深合并，仅覆盖环境差异项。
+#
+# 部署：
+#   helm upgrade --install invite-activity charts/invite-activity \
+#     -n growth -f charts/invite-activity/values-test.yaml
+#
+# 前置：sealed/test.sealedsecret.yaml 已 apply、goodnotes-app-beta.cn-tls 已在 growth ns。
+
+namespace: growth
+
+ingress:
+  host: invite.goodnotes-app-beta.cn
+  # beta 通配证书（从其他 ns 拷贝到 growth）
+  tlsSecretName: goodnotes-app-beta.cn-tls
+  # 测试环境限制来源 IP（与 values.yaml 的 annotations 深合并）
+  annotations:
+    nginx.ingress.kubernetes.io/whitelist-source-range: "112.65.98.0/24,14.103.254.66/32"

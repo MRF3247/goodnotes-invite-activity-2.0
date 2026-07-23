@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>排行榜 · Goodnotes极速版 邀请有礼</title>
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/style.css?v=7">
+<style>
+  .code-copy {
+    font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .04em; font-weight: 600;
+    background: rgba(0,0,0,.04); border: 1px solid rgba(0,0,0,.08); border-radius: 8px;
+    padding: 4px 10px; cursor: pointer; color: inherit; transition: background .15s, transform .1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .code-copy:hover { background: rgba(0,0,0,.08); }
+  .code-copy:active { transform: scale(.96); }
+  .code-copy.copied { background: #16a34a; border-color: #16a34a; color: #fff; }
+  .copy-toast {
+    position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%) translateY(12px);
+    background: rgba(20,20,20,.92); color: #fff; padding: 10px 18px; border-radius: 22px;
+    font-size: 14px; z-index: 9999; opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s; max-width: 86vw; text-align: center;
+  }
+  .copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .lb-table th.prize, .lb-table td.prize { text-align: right; }
+  .code-cell { line-height: 1.3; }
+  .code-sub { font-size: 12.5px; color: var(--muted, #8a8f98); margin-top: 4px; }
+  .prize .prize-label { display: block; font-size: 12px; color: var(--muted, #8a8f98); }
+  .prize .prize-name { display: block; font-weight: 600; font-size: 13.5px; }
+  .prize .prize-none { color: var(--muted, #b5b9c0); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="site-header">
+    <div class="brand">
+      <img class="brand-icon" src="/assets/icon.svg" alt="">
+      <img class="brand-word" src="/assets/logo-black.svg" alt="Goodnotes极速版">
+    </div>
+    <button class="badge" id="authBtn">登录</button>
+  </header>
+
+  <nav class="seg-nav">
+    <a href="/">📝 报名领码</a>
+    <a href="/leaderboard" class="active">🏆 排行榜</a>
+  </nav>
+
+  <h1>邀请排行榜 🏆</h1>
+  <p class="sub" id="snapInfo">排行榜每日公示</p>
+
+  <!-- 活动已结束提示（仅结束态显示） -->
+  <div class="alert warn" id="endedBanner" style="display:none">本期活动已结束，感谢您的参与！后台成绩结算中，请关注官方小红书号的通知，谢谢！</div>
+
+  <!-- 我的排名 -->
+  <div class="card">
+    <h2>查看我的战绩</h2>
+    <div id="myAlert" class="alert"></div>
+    <div id="myForm">
+      <label for="qUid">用户ID（UID）</label>
+      <input type="text" id="qUid" placeholder="App「设置-关于」页可复制" autocomplete="off" spellcheck="false">
+      <p class="hint">只需输入 UID 即可登录查战绩。<b>UID 是您的唯一身份识别码，请勿泄露给他人。</b></p>
+      <label>验证码</label>
+      <div class="captcha-row" id="qCaptcha">
+        <input type="text" inputmode="numeric" placeholder="计算结果" autocomplete="off">
+        <div class="captcha-img"></div>
+      </div>
+      <button class="btn block" id="qBtn" style="margin-top:14px">查询我的排名</button>
+    </div>
+
+    <div id="myResult" style="display:none">
+      <div class="my-rank-hero">
+        <p class="label">邀请码「<span id="myNick"></span>」· 当前排名</p>
+        <p class="num">第 <span id="myRank"></span> 名 <small>· 已邀请 <span id="myScore"></span> 人</small></p>
+        <p class="label" id="mySnapDate"></p>
+      </div>
+      <div class="tier-list" id="tierList"></div>
+      <button class="btn secondary block" id="qAgain" style="margin-top:12px">重新查询</button>
+    </div>
+
+    <div id="myPending" style="display:none">
+      <div class="alert info" style="display:block" id="myPendingMsg"></div>
+      <button class="btn secondary block" id="qAgain2">重新查询</button>
+    </div>
+  </div>
+
+  <!-- 排行榜 -->
+  <div class="card">
+    <h2>邀请榜 · 前20名</h2>
+    <div id="lbEmpty" class="alert info" style="display:none"></div>
+    <div class="table-wrap">
+      <table class="lb-table" id="lbTable" style="display:none">
+        <thead><tr><th class="rank">排名</th><th>邀请码</th><th class="prize">名次奖</th></tr></thead>
+        <tbody id="lbBody"></tbody>
+      </table>
+    </div>
+    <p class="muted" id="lbNote" style="margin-top:10px"></p>
+  </div>
+
+  <p class="center"><a href="/" class="text-link" style="text-decoration:none">← 返回活动报名页</a></p>
+</div>
+
+<script src="/js/common.js?v=2"></script>
+<script>
+(function () {
+  const qCaptcha = initCaptcha($('#qCaptcha'));
+  const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  let myNickname = null;
+
+  // 点击邀请码复制到剪贴板，短暂反馈“已复制”
+  let toastTimer = null;
+  function showToast(msg) {
+    let t = $('#copyToast');
+    if (!t) { t = document.createElement('div'); t.id = 'copyToast'; t.className = 'copy-toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+  }
+  async function copyCode(code, btn) {
+    let ok = false;
+    try { await navigator.clipboard.writeText(code); ok = true; }
+    catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        ok = document.execCommand('copy'); document.body.removeChild(ta);
+      } catch { ok = false; }
+    }
+    if (ok) {
+      showToast('已复制邀请码 ' + code);
+      if (btn) { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 800); }
+    } else {
+      showToast('复制失败，请长按手动复制');
+    }
+  }
+
+  function renderBoard(d) {
+    if (!d.hasData) {
+      const e = $('#lbEmpty');
+      e.textContent = '当前暂无排行信息，排行榜每日公示，敬请期待！';
+      e.style.display = 'block';
+      return;
+    }
+    $('#snapInfo').textContent = `数据更新于 ${d.snapAt || d.snapDate} · ${d.note}`;
+    const tbody = $('#lbBody');
+    tbody.innerHTML = '';
+    const myCode = (getSaved().code || '').toString();
+    for (const row of d.top) {
+      const tr = document.createElement('tr');
+      if (row.rank <= 3) tr.className = 'top' + row.rank;
+      const isMe = myCode && row.code === myCode;
+      if (isMe) tr.classList.add('me');
+      const rankCell = medals[row.rank] ? `<span class="medal">${medals[row.rank]}</span>${row.rank}` : row.rank;
+      tr.innerHTML = `<td class="rank">${rankCell}</td><td class="code-cell"></td><td class="prize"></td>`;
+      // 邀请码（点击即复制，无文字说明，靠交互自发现）+ 下方“已邀请 xx 人”
+      const codeCell = tr.children[1];
+      if (row.code) {
+        const btn = document.createElement('button');
+        btn.className = 'code-copy';
+        btn.type = 'button';
+        btn.textContent = row.code;
+        btn.title = '点击复制邀请码';
+        btn.addEventListener('click', () => copyCode(row.code, btn));
+        codeCell.appendChild(btn);
+      } else {
+        const span = document.createElement('div');
+        span.textContent = '—';
+        codeCell.appendChild(span);
+      }
+      const sub = document.createElement('div');
+      sub.className = 'code-sub';
+      sub.textContent = `已邀请 ${row.score} 人` + (isMe ? '（我）' : '');
+      codeCell.appendChild(sub);
+      // 名次奖（右侧）
+      const prizeCell = tr.children[2];
+      if (row.prize && row.prize.prize) {
+        prizeCell.innerHTML = `<span class="prize-label"></span><span class="prize-name"></span>`;
+        prizeCell.querySelector('.prize-label').textContent = row.prize.label || '';
+        prizeCell.querySelector('.prize-name').textContent = row.prize.prize;
+      } else {
+        prizeCell.innerHTML = `<span class="prize-none">—</span>`;
+      }
+      tbody.appendChild(tr);
+    }
+    $('#lbTable').style.display = 'table';
+    $('#lbNote').textContent = `${d.note} · 人数相同按领码时间先后排序 · 冲榜奖与达标奖不可叠加，只发最高档`;
+  }
+
+  let boardData = null;
+  api('/api/leaderboard').then(d => { if (d.ok) { boardData = d; renderBoard(d); } });
+  // 活动结束态：顶部显示结算提示
+  api('/api/meta').then(d => { if (d && d.ok && d.phase === 'ended') $('#endedBanner').style.display = 'block'; });
+
+  const CLAIM_KEY = 'gn_claim';
+  function getSaved() {
+    try { return JSON.parse(localStorage.getItem(CLAIM_KEY) || 'null') || {}; } catch { return {}; }
+  }
+  // 右上角登录/退出按钮：未登录点击定位到查询表单，已登录点击退出
+  let authed = false;
+  function setAuthed(v) {
+    authed = v;
+    $('#authBtn').textContent = v ? '退出登录' : '登录';
+  }
+  setAuthed(!!(getSaved().rankToken || getSaved().code));
+  $('#authBtn').addEventListener('click', () => {
+    if (authed) {
+      try { localStorage.removeItem(CLAIM_KEY); } catch {}
+      location.reload();
+    } else {
+      $('#myForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('#qUid').focus({ preventScroll: true });
+    }
+  });
+
+  // 合并保存登录状态（昵称/邀请码/令牌），未提供的字段保留原值
+  function saveClaim(patch) {
+    try {
+      const merged = { ...getSaved() };
+      for (const [k, v] of Object.entries(patch)) if (v !== undefined) merged[k] = v;
+      localStorage.setItem(CLAIM_KEY, JSON.stringify(merged));
+    } catch {}
+    setAuthed(true);
+  }
+
+  function resetQuery() {
+    $('#myResult').style.display = 'none';
+    $('#myPending').style.display = 'none';
+    $('#myForm').style.display = 'block';
+    hideAlert($('#myAlert'));
+    qCaptcha.refresh();
+  }
+  $('#qAgain').addEventListener('click', resetQuery);
+  $('#qAgain2').addEventListener('click', resetQuery);
+
+  // 展示查询结果（手动查询与令牌自动查询共用）
+  function renderMyResult(d, viaToken) {
+    $('#myForm').style.display = 'none';
+    // 令牌模式下隐藏“重新查询”（右上角有退出登录）
+    $('#qAgain').style.display = viaToken ? 'none' : 'block';
+    $('#qAgain2').style.display = viaToken ? 'none' : 'block';
+
+    if (!d.hasData) {
+      $('#myPendingMsg').textContent = `你已报名成功（邀请码 ${d.code}）。${d.msg}`;
+      $('#myPending').style.display = 'block';
+      return;
+    }
+
+    $('#myNick').textContent = d.code;
+    $('#myRank').textContent = d.rank;
+    $('#myScore').textContent = d.score;
+    $('#mySnapDate').textContent = `数据统计至 ${d.snapDate}`;
+
+    const list = $('#tierList');
+    list.innerHTML = '';
+    const hasRankPrize = d.rankPrize && d.rankPrize.prize;
+    // 达标奖进度（名次奖优先时仅作参考展示）
+    for (const t of d.tiers) {
+      const div = document.createElement('div');
+      div.className = 'tier';
+      const pct = Math.min(100, Math.round(d.score / t.score * 100));
+      if (t.reached) {
+        div.innerHTML = `<span class="name"></span><span class="reached">✓ 已达成</span>`;
+      } else {
+        div.innerHTML = `<span class="name"></span><div class="tier-bar"><i style="width:${pct}%"></i></div><span class="gap">还差 ${t.gap} 人</span>`;
+      }
+      div.querySelector('.name').textContent = `${t.name}（邀请${t.score}人）`;
+      list.appendChild(div);
+    }
+    // 不可叠加：进入名次奖区间只发名次奖；否则发达标奖最高完成一档
+    const box = document.createElement('div');
+    box.className = 'alert ok';
+    box.style.cssText = 'display:block;margin-top:10px';
+    if (hasRankPrize) {
+      box.textContent = `🎉 你已进入冲榜奖：${d.rankPrize.label ? d.rankPrize.label + ' · ' : ''}${d.rankPrize.prize}。冲榜奖与达标奖不可叠加，最终以冲榜奖发放。`;
+      list.appendChild(box);
+    } else {
+      const reached = d.tiers.filter(t => t.reached);
+      if (reached.length) {
+        const top = reached[reached.length - 1];
+        const rewardName = (top.name.split('·').pop() || top.name).trim();
+        box.textContent = `🎉 恭喜！你当前可领取达标奖：${rewardName}（只兑现最高完成一档；冲进前十名则改发冲榜奖，二者不叠加）`;
+        list.appendChild(box);
+      }
+    }
+    $('#myResult').style.display = 'block';
+    if (boardData) renderBoard(boardData); // 高亮我在榜单中的行
+  }
+
+  // 页面加载：本设备已验证过身份的用户，自动展示排名（免输入、免验证码）
+  (async () => {
+    const saved = getSaved();
+    if (!saved.rankToken) return;
+    const d = await api('/api/myrank', { rankToken: saved.rankToken });
+    if (d.ok) { saveClaim({ nickname: d.nickname, code: d.code, rankToken: d.rankToken }); renderMyResult(d, true); }
+    else if (d.needAuth) saveClaim({ rankToken: null }); // 令牌过期，回退手动查询
+  })();
+
+  // 手动查询
+  $('#qBtn').addEventListener('click', async () => {
+    hideAlert($('#myAlert'));
+    const uid = $('#qUid').value.trim();
+    if (!uid) return showAlert($('#myAlert'), 'error', '请填写用户ID');
+    if (!qCaptcha.answer) return showAlert($('#myAlert'), 'error', '请填写验证码');
+    const btn = $('#qBtn');
+    btn.disabled = true; btn.textContent = '查询中…';
+    const d = await api('/api/myrank', { uid, captchaToken: qCaptcha.token, captchaAnswer: qCaptcha.answer });
+    btn.disabled = false; btn.textContent = '查询我的排名';
+    if (!d.ok) { showAlert($('#myAlert'), 'error', d.msg); qCaptcha.refresh(); return; }
+    if (d.rankToken) saveClaim({ nickname: d.nickname, code: d.code, rankToken: d.rankToken }); // 手动查询成功后本设备免输入，报名页也能直接看邀请码
+    renderMyResult(d, false);
+  });
+})();
+</script>
+</body>
+</html>

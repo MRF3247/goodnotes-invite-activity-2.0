@@ -1,0 +1,15 @@
+# 敏感文件：密钥与口令，绝不入库
+api-key.txt
+config.json
+
+# 运行数据：用户报名数据库
+data/
+
+# 系统与临时文件
+.DS_Store
+*.zip
+node_modules/
+
+# helm chart 明文密钥源（seal.sh 输入），绝不入库
+charts/**/values-*.local.yaml
+charts/**/*.crt

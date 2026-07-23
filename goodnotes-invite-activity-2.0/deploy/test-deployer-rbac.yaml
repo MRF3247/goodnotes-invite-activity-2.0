@@ -1,0 +1,52 @@
+# deploy-test workflow 用的最小权限部署身份（测试 VKE）。
+#
+#   SA / Role / RoleBinding 全部建在目标 growth ns —— 该身份【只能】操作 growth ns，
+#   且仅限 helm 部署 invite-activity chart 所需的资源类型。
+#   凭据不落在集群 runner 上：为该 SA 签长期 token → 打包成 scoped kubeconfig →
+#   存为 Gitea secret KUBE_CONFIG_TEST（仅本仓库 workflow 可读）。
+#
+# apply（本地 kubectl 已指向测试集群）：
+#   kubectl apply -f deploy/test-deployer-rbac.yaml
+#
+# 随后按 docs/deploy-test-workflow.md 生成 kubeconfig 并存入 Gitea secret。
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: invite-activity-deployer
+  namespace: growth
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: invite-activity-deployer
+  namespace: growth
+rules:
+  # helm 把 release 状态存成本 ns 的 Secret；同时需读取 config.json 密钥
+  - apiGroups: [""]
+    resources: ["secrets", "services", "persistentvolumeclaims", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # helm --wait / kubectl rollout status / 排障需要读 pod 与事件
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: invite-activity-deployer
+  namespace: growth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: invite-activity-deployer
+subjects:
+  - kind: ServiceAccount
+    name: invite-activity-deployer
+    namespace: growth

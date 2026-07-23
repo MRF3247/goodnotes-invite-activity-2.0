@@ -1,0 +1,8 @@
+# 明文密钥源，绝不打进 chart 包
+values-*.local.yaml
+# sealing 用的本地 cert
+*.crt
+*.pem
+.DS_Store
+*.orig
+sealed/

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "invite-activity.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "invite-activity.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "invite-activity.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

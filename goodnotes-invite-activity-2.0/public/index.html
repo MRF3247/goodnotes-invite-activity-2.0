@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Goodnotes极速版 · 邀请有礼</title>
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/style.css?v=7">
+<style>
+  /* 浏览器标签样式：底部一条基线，激活项用品牌色下划线指示 */
+  .hub-tabs { display:flex; gap:4px; margin:8px 0 14px; border-bottom:1.5px solid rgba(0,0,0,.1); }
+  .hub-tabs button { flex:none; border:none; background:transparent; padding:10px 20px 12px; font:inherit;
+    font-size:15px; font-weight:600; color:var(--muted,#8a8f98); cursor:pointer; border-bottom:2.5px solid transparent;
+    margin-bottom:-1.5px; border-radius:8px 8px 0 0; transition:color .15s,border-color .15s,background .15s; }
+  .hub-tabs button:hover { background:rgba(0,0,0,.03); }
+  .hub-tabs button.active { color:var(--brand,#1f6feb); border-bottom-color:var(--brand,#1f6feb); }
+  @media (prefers-color-scheme: dark) {
+    .hub-tabs { border-bottom-color:rgba(255,255,255,.14); }
+    .hub-tabs button:hover { background:rgba(255,255,255,.05); }
+  }
+  .code-copy { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; letter-spacing:.04em; font-weight:600;
+    background:rgba(0,0,0,.04); border:1px solid rgba(0,0,0,.08); border-radius:8px; padding:4px 10px; cursor:pointer;
+    color:inherit; font-size:15px; transition:background .15s,transform .1s; -webkit-tap-highlight-color:transparent; }
+  .code-copy:hover { background:rgba(0,0,0,.08); }
+  .code-copy:active { transform:scale(.96); }
+  .code-copy.copied { background:#16a34a; border-color:#16a34a; color:#fff; }
+  .code-sub { font-size:12.5px; color:var(--muted,#8a8f98); margin-top:4px; }
+  .lb-table th.prize, .lb-table td.prize { text-align:right; }
+  .prize .prize-label { display:block; font-size:12px; color:var(--muted,#8a8f98); }
+  .prize .prize-name { display:block; font-weight:600; font-size:13.5px; }
+  .prize .prize-none { color:var(--muted,#b5b9c0); }
+  .copy-toast { position:fixed; left:50%; bottom:32px; transform:translateX(-50%) translateY(12px);
+    background:rgba(20,20,20,.92); color:#fff; padding:10px 18px; border-radius:22px; font-size:14px; z-index:9999;
+    opacity:0; pointer-events:none; transition:opacity .2s,transform .2s; max-width:86vw; text-align:center; }
+  .copy-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  /* 当前奖励卡片（只展示单档，突出好看） */
+  .reward-card { margin:14px 0; padding:20px 16px; border-radius:16px; text-align:center;
+    background:linear-gradient(135deg,#fff4d6,#ffe0b3); border:1px solid #ffd08a; }
+  .reward-tag { font-size:13px; color:#b26a00; font-weight:600; letter-spacing:.02em; }
+  .reward-main { font-size:23px; font-weight:800; color:#7a4a00; margin:8px 0 6px; line-height:1.25; }
+  .reward-note { font-size:13px; color:#8a6d3b; line-height:1.5; }
+  /* 推广文案区 */
+  .promo-block { margin-top:16px; }
+  .promo-label { font-size:13px; color:var(--muted,#8a8f98); font-weight:600; margin-bottom:6px; }
+  .promo-preview { white-space:pre-wrap; word-break:break-word; background:rgba(0,0,0,.04);
+    border:1px solid rgba(0,0,0,.08); border-radius:12px; padding:12px; font-size:13.5px; line-height:1.6;
+    max-height:230px; overflow:auto; }
+  .promo-actions { display:flex; gap:8px; margin-top:10px; }
+  .promo-actions .btn { flex:1; }
+  @media (prefers-color-scheme: dark) {
+    .reward-card { background:linear-gradient(135deg,#3a2f14,#4a3a17); border-color:#6b5220; }
+    .reward-tag { color:#f0c46b; } .reward-main { color:#ffe3a3; } .reward-note { color:#d8bd85; }
+  }
+  /* 活动标题 + 标语 */
+  .hero-title { text-align:center; margin:4px 0 18px; }
+  .hero-title .ht-line1 { font-size:20px; font-weight:800; }
+  .hero-title .ht-slogan { font-size:15px; font-weight:700; margin-top:6px;
+    background:linear-gradient(90deg,#c9971f,#f0c14b); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  /* 我的战绩·排名 */
+  .rank-caption { text-align:center; color:var(--muted,#8a8f98); font-size:13px; margin:2px 0; }
+  .rank-big { text-align:center; font-size:34px; font-weight:900; margin:4px 0; line-height:1.1; }
+  .rank-big.gold { color:#d4a017; } .rank-big.silver { color:#8a94a6; } .rank-big.bronze { color:#b06a2c; }
+  /* 奖励卡片·奖牌配色 */
+  .reward-card.silver { background:linear-gradient(135deg,#f2f4f8,#d6dbe6); border-color:#c0c7d6; }
+  .reward-card.silver .reward-tag { color:#5c6675; } .reward-card.silver .reward-main { color:#333c4a; }
+  .reward-card.bronze { background:linear-gradient(135deg,#f8e7d6,#eacaa6); border-color:#d9a86f; }
+  .reward-card.bronze .reward-tag { color:#8a5a28; } .reward-card.bronze .reward-main { color:#6b4318; }
+  .reward-note-out { text-align:center; color:var(--muted,#8a8f98); font-size:12.5px; margin:9px 0 0; line-height:1.5; }
+  .btn.is-disabled { opacity:.5; }
+  /* 规则链接美化 */
+  #nsOpenRules, #rpOpenRules { color:var(--brand,#1f6feb); font-weight:600; text-decoration:none; }
+  #nsOpenRules:hover, #rpOpenRules:hover { text-decoration:underline; }
+  #nsDoneRules { display:inline-block; padding:7px 16px; border-radius:20px; text-decoration:none;
+    color:var(--brand,#1f6feb); font-weight:600; font-size:14px;
+    border:1px solid rgba(31,111,235,.35); background:rgba(31,111,235,.07); transition:background .15s; }
+  #nsDoneRules:hover { background:rgba(31,111,235,.14); }
+  /* 登录后·邀请码+文案栏：压缩高度，突出榜单/战绩 */
+  #inviteBar { padding:14px 16px; }
+  #inviteBar .promo-label { font-size:12.5px; }
+  /* 文案框在左、三个按钮竖排在右 */
+  .promo-row { display:flex; gap:8px; margin-top:10px; align-items:flex-start; }
+  .promo-row .promo-preview { flex:1; min-width:0; margin:0; height:120px; max-height:120px; overflow:auto;
+    font-size:12.5px; line-height:1.5; padding:9px 11px; }
+  .promo-row .promo-actions { display:flex; flex-direction:column; gap:8px; width:104px; flex:none; margin:0; }
+  .promo-row .promo-actions .btn { box-sizing:border-box; width:100%; min-width:0; font-size:11.5px;
+    padding:8px 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .invite-code-line { display:flex; align-items:center; gap:8px; }
+  .code-chip { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-weight:700;
+    letter-spacing:.06em; font-size:15px; color:var(--brand,#1f6feb);
+    background:rgba(31,111,235,.1); padding:3px 12px; border-radius:8px; }
+  .header-actions { display:flex; align-items:center; gap:8px; }
+  .modal-close { position:absolute; top:10px; right:12px; width:30px; height:30px; border-radius:50%;
+    border:none; background:rgba(0,0,0,.06); color:var(--muted,#8a8f98); font-size:15px; line-height:1;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s; }
+  .modal-close:hover { background:rgba(0,0,0,.12); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="site-header">
+    <div class="brand">
+      <img class="brand-icon" src="/assets/icon.svg" alt="">
+      <img class="brand-word" src="/assets/logo-black.svg" alt="Goodnotes极速版">
+    </div>
+    <div class="header-actions">
+      <button class="badge" id="rulesBtn">活动规则</button>
+      <button class="badge" id="topBtn" style="display:none">登录</button>
+    </div>
+  </header>
+
+  <div id="pageAlert" class="alert"></div>
+
+  <div class="hero-title">
+    <div class="ht-line1" id="heroTitle">「Goodnotes极速版」推荐计划 第二期</div>
+    <div class="ht-slogan" id="heroSlogan">成为推荐官，你的愿望我买单！</div>
+  </div>
+
+  <!-- ============ 阶段A：活动未开始（报名/登录） ============ -->
+  <section id="notStartedView" style="display:none">
+    <div class="card">
+      <div id="preRegForm">
+        <div class="alert info" style="display:block;margin-bottom:14px">活动尚未开始，可以先报名哦～ 报名后邀请码将在活动开始后依序发放。</div>
+        <label for="nsUid">用户ID（UID）</label>
+        <input type="text" id="nsUid" autocomplete="off" spellcheck="false" placeholder="App「设置-关于」可复制" enterkeyhint="done">
+        <p class="hint">已报名的用户，输入同一 UID 即可登录。<b>UID 是唯一身份识别码，请勿泄露给他人。</b></p>
+        <p class="field-err" id="nsUidErr"></p>
+        <label>验证码</label>
+        <div class="captcha-row" id="nsCaptcha">
+          <input type="text" inputmode="numeric" placeholder="计算结果" autocomplete="off">
+          <div class="captcha-img"></div>
+        </div>
+        <div id="nsAlert" class="alert"></div>
+        <button class="btn block" id="nsSubmit" style="margin-top:12px">报名 / 登录</button>
+        <p class="hint" style="text-align:center;margin-top:10px">点击即代表已阅读并同意<a href="javascript:void(0)" id="nsOpenRules">《「Goodnotes极速版」推荐计划 参与规则》</a></p>
+      </div>
+      <div id="preRegDone" style="display:none">
+        <div class="alert ok" style="display:block">🎉 报名成功，请等待活动开始！</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 阶段C-未登录：活动已结束 + 登录 ============ -->
+  <section id="endedLoginView" style="display:none">
+    <div class="card">
+      <div class="alert warn" style="display:block;margin-bottom:14px">本期活动已结束，感谢您的参与！</div>
+      <h2>登录查看我的成绩</h2>
+      <div id="elAlert" class="alert"></div>
+      <label for="elUid">用户ID（UID）</label>
+      <input type="text" id="elUid" autocomplete="off" spellcheck="false" placeholder="App「设置-关于」可复制">
+      <label>验证码</label>
+      <div class="captcha-row" id="elCaptcha">
+        <input type="text" inputmode="numeric" placeholder="计算结果" autocomplete="off">
+        <div class="captcha-img"></div>
+      </div>
+      <button class="btn block" id="elLogin" style="margin-top:12px">登录</button>
+    </div>
+  </section>
+
+  <!-- ============ 阶段B/C-已登录：排行榜 + 我的战绩 ============ -->
+  <section id="hubView" style="display:none">
+    <div class="alert warn" id="endedBanner" style="display:none">本期活动已结束，感谢您的参与！以下为最终榜单与你的成绩。</div>
+
+    <!-- 登录后·进行中：邀请码 + 推广文案（常驻主标题下，方便随时复制转发） -->
+    <div id="inviteBar" class="card" style="display:none">
+      <div class="invite-code-line"><span class="promo-label" style="margin:0">你的邀请码</span><span class="code-chip" id="myCodeCopy"></span></div>
+      <div class="promo-row">
+        <div class="promo-preview" id="mePromoPreview"></div>
+        <div class="promo-actions">
+          <button class="btn small accent" id="myCopyCodeBtn">复制邀请码</button>
+          <button class="btn small accent" id="mePromoCopy">复制文案+邀请码</button>
+          <button class="btn small secondary" id="mePromoChange">换一条</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hub-tabs">
+      <button data-tab="board" class="active">🏆 排行榜</button>
+      <button data-tab="me" id="tabMe">📊 我的战绩</button>
+    </div>
+
+    <!-- 排行榜面板 -->
+    <div data-panel="board">
+      <p class="sub" id="snapInfo">排行榜每小时更新</p>
+      <div class="card">
+        <div id="lbEmpty" class="alert info" style="display:none"></div>
+        <div class="table-wrap">
+          <table class="lb-table" id="lbTable" style="display:none">
+            <thead><tr><th class="rank">排名</th><th>邀请码</th><th class="prize">奖品</th></tr></thead>
+            <tbody id="lbBody"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="lbNote" style="margin-top:10px"></p>
+      </div>
+    </div>
+
+    <!-- 我的战绩面板 -->
+    <div data-panel="me" style="display:none">
+      <div class="card">
+        <div id="meResult" style="display:none">
+          <div class="my-rank-hero">
+            <p class="rank-caption">当前排名</p>
+            <p class="rank-big" id="rankBig">第 <span id="myRank"></span> 名</p>
+            <p class="rank-caption">已邀请 <span id="myScore"></span> 人</p>
+            <p class="rank-caption" id="mySnapDate"></p>
+          </div>
+          <div class="reward-card" id="rewardCard">
+            <div class="reward-tag">当前奖励</div>
+            <div class="reward-main" id="rewardMain">—</div>
+          </div>
+          <p class="reward-note-out" id="rewardNote"></p>
+          <div style="margin-top:16px">
+            <button class="btn secondary block" id="openPrizeBtn">领奖</button>
+            <p class="hint" style="text-align:center;margin-top:6px" id="prizeHint">活动结束后可填写领奖信息</p>
+          </div>
+        </div>
+        <div id="mePending" style="display:none">
+          <div class="alert info" style="display:block" id="mePendingMsg"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="center" style="margin-top:8px"><span class="hint" id="footNote"></span></p>
+</div>
+
+<!-- ============ 弹窗：报名（进行中） ============ -->
+<div class="modal-mask" id="reportMask">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3 id="reportStep1Title">我要报名</h3>
+    <div id="reportForm">
+      <p class="hint">填写你的 Goodnotes极速版 用户ID 即可参赛，系统将分配专属邀请码。</p>
+      <label for="rpUid">用户ID（UID）</label>
+      <input type="text" id="rpUid" autocomplete="off" spellcheck="false" placeholder="App「设置-关于」可复制">
+      <p class="field-err" id="rpUidErr"></p>
+      <label>验证码</label>
+      <div class="captcha-row" id="rpCaptcha">
+        <input type="text" inputmode="numeric" placeholder="计算结果" autocomplete="off">
+        <div class="captcha-img"></div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="rpAgree">
+        <span>我已阅读并同意<a href="javascript:void(0)" id="rpOpenRules">《活动参与规则》</a></span>
+      </div>
+      <div id="reportAlert" class="alert"></div>
+      <button class="btn block" id="rpSubmit" style="margin-top:12px">确认报名，领取邀请码</button>
+      <button class="btn secondary block" id="rpCancel">取消</button>
+    </div>
+    <div id="reportDone" style="display:none">
+      <div class="alert ok" style="display:block">🎉 报名成功！这是你的专属邀请码：</div>
+      <div class="code-box"><span class="code" id="rpCode"></span><button class="btn small accent" id="rpCopyCodeBtn">复制邀请码</button></div>
+      <div class="promo-label" style="margin-top:12px">推广文案 · 每次随机一条，可换</div>
+      <div class="promo-preview" id="rpPromoPreview"></div>
+      <div class="promo-actions">
+        <button class="btn small secondary" id="rpPromoChange">🔄 换一条</button>
+        <button class="btn small accent" id="rpPromoCopy">复制文案+邀请码</button>
+      </div>
+      <p class="hint">复制后直接粘贴发给好友。好友在「Goodnotes极速版」兑换后即计入你的邀请人数。<b>邀请码仅可邀请新用户。</b></p>
+      <button class="btn block" id="rpDoneBtn" style="margin-top:10px">好的，去看排行榜</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 弹窗：登录 ============ -->
+<div class="modal-mask" id="loginMask">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3>登录</h3>
+    <div id="loginAlert" class="alert"></div>
+    <label for="lgUid">用户ID（UID）</label>
+    <input type="text" id="lgUid" autocomplete="off" spellcheck="false" placeholder="App「设置-关于」可复制">
+    <p class="hint">只需输入报名时用的 UID 即可登录。<b>UID 是唯一身份识别码，请勿泄露给他人。</b></p>
+    <label>验证码</label>
+    <div class="captcha-row" id="lgCaptcha">
+      <input type="text" inputmode="numeric" placeholder="计算结果" autocomplete="off">
+      <div class="captcha-img"></div>
+    </div>
+    <button class="btn block" id="lgSubmit" style="margin-top:12px">登录</button>
+    <button class="btn secondary block" id="lgCancel">取消</button>
+  </div>
+</div>
+
+<!-- ============ 弹窗：领奖信息 ============ -->
+<div class="modal-mask" id="prizeMask">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h3>填写领奖信息</h3>
+    <p class="hint">请在结算后一周内填写您的领奖信息，逾期视为放弃奖励。</p>
+    <div id="prizeAlert" class="alert"></div>
+    <label for="pzXhs">小红书号<span style="color:var(--danger,#e5484d)"> *</span></label>
+    <input type="text" id="pzXhs" placeholder="6-15位字符" autocomplete="off" spellcheck="false">
+    <div id="pzShipping" style="display:none">
+      <p class="hint" style="margin:2px 0 10px">你已进入前十名，需填写收件信息用于发放奖品：</p>
+      <label for="pzName">收件人姓名<span style="color:var(--danger,#e5484d)"> *</span></label>
+      <input type="text" id="pzName" maxlength="20" autocomplete="off">
+      <label for="pzPhone">联系电话<span style="color:var(--danger,#e5484d)"> *</span></label>
+      <input type="text" id="pzPhone" inputmode="numeric" autocomplete="off">
+      <label for="pzAddr">收货地址<span style="color:var(--danger,#e5484d)"> *</span></label>
+      <input type="text" id="pzAddr" maxlength="120" autocomplete="off">
+    </div>
+    <button class="btn block" id="pzSubmit" style="margin-top:12px">提交领奖信息</button>
+    <button class="btn secondary block" id="pzCancel">取消</button>
+  </div>
+</div>
+
+<!-- ============ 弹窗：规则 ============ -->
+<div class="modal-mask" id="rulesMask">
+  <div class="modal" role="dialog" aria-modal="true" style="position:relative">
+    <button class="modal-close" id="rulesX" aria-label="关闭">✕</button>
+    <h3>「Goodnotes极速版」推荐计划 参与规则</h3>
+    <div class="rules-body">
+      <ol>
+        <li><b>主办方：</b>Goodnotes极速版。</li>
+        <li><b>活动时间：</b>以活动页面公示为准（北京时间）。</li>
+        <li><b>参与资格：</b>已下载并使用Goodnotes极速版App的用户。未成年人参与需经监护人同意。</li>
+        <li><b>报名说明：</b>每位用户只需填写Goodnotes极速版用户ID即可报名。<b>同一用户ID仅可报名一次</b>。用户ID一经确认无法修改，请仔细核对；因本人填写错误导致无法核实身份或发奖的，主办方将取消其发奖资格。</li>
+        <li><b>邀请码规则：</b>每位报名成功的用户获得唯一一枚专属邀请码，可分享给他人在Goodnotes极速版内兑换。该邀请码<b>仅可邀请新用户</b>，若被邀请对象账户内已存在生效中的会员权益，则邀请码对其无效。请妥善保管自己的用户ID，切勿泄露给他人。</li>
+        <li><b>排行榜规则：</b>邀请码每成功邀请1位新用户激活计为成功邀请1人。数据每小时更新、每日经人工复核。排行榜公开展示邀请码、邀请人数及该名次对应奖励，不会公开用户ID。人数相同者按领码时间先后排序。</li>
+        <li><b>奖励设置：</b>本活动设「冲榜奖」与「达标奖」，<b>二者不可叠加</b>，每位参赛者只按当前对应的最高档位发放一项：进入前十名者按冲榜奖发放，未进入前十名者按达标奖发放（达标奖只兑现最高完成一档）。冲榜奖具体奖品与达标奖档位以活动页公示为准。愿望金指在预算范围内、由主办方代购中奖者指定且可开具发票的物品，不可折现。</li>
+        <li><b>领奖说明：</b>会员类奖励以兑换码的形式发放；愿望金/实物类奖励，中奖者需在结算后一周内按官方指引填写小红书号、收件信息等，逾期视为放弃奖励。因用户自身信息错误导致无法联系或核实的，视为放弃奖励资格。</li>
+        <li><b>违规处理：</b>使用同一设备切换账号多次兑换、同一IP下大量异常兑换等行为将被系统检测，<b>违规刷量将扣除相应分数、排名下降，严重者取消资格</b>。</li>
+        <li><b>个人信息使用说明：</b>您提交的用户ID及领奖信息仅用于本次活动的身份核实及奖励发放，主办方不会用于其他用途或提供给无关第三方。</li>
+        <li>本活动最终解释权归Goodnotes极速版所有。</li>
+      </ol>
+    </div>
+    <button class="btn block" id="rulesClose">我知道了</button>
+  </div>
+</div>
+
+<script src="/js/common.js?v=2"></script>
+<script>
+(function () {
+  const CLAIM_KEY = 'gn_claim';
+  const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  let META = null, BOARD = null, LOGGED = false, ME = null;
+  let mePromo = null, rpPromo = null;
+  const MEDALS = { 1: 'gold', 2: 'silver', 3: 'bronze' };
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function getSaved() { try { return JSON.parse(localStorage.getItem(CLAIM_KEY) || 'null') || {}; } catch { return {}; } }
+  function saveClaim(patch) {
+    const m = { ...getSaved() };
+    for (const [k, v] of Object.entries(patch)) if (v !== undefined) m[k] = v;
+    try { localStorage.setItem(CLAIM_KEY, JSON.stringify(m)); } catch {}
+  }
+  function clearClaim() { try { localStorage.removeItem(CLAIM_KEY); } catch {} }
+
+  // 推广文案库（正文，末尾统一拼「邀请码⬇️ + 用户的码」）
+  const PROMOS = [
+    'Hi～推荐你一个巨好用的手写笔记App，在应用商店搜索「Goodnotes极速版」，注册后点击App左下角的「超值权益 立即兑换」进入兑换页，使用我的邀请码，就可以免费获得一个月会员哦～',
+    '笔记多到爆炸？试试 Goodnotes极速版！笔记数量无上限，跨平台超高速云同步，笔刷手感像在真纸上写字。应用商店搜「Goodnotes极速版」，注册后点左下角「超值权益 立即兑换」，填我的邀请码免费领一个月会员👇',
+    '刚发现一个好用的手写笔记App——Goodnotes极速版，笔记无上限、云同步超快、笔刷手感绝了。搜App下载后点「超值权益 立即兑换」，输入邀请码能免费领一个月会员，不薅白不薅。',
+    '之前用的笔记App要么限数量要么同步慢，换 Goodnotes极速版 之后真香了：笔记随便建不封顶，跨设备同步快到无感，手写笔刷阻尼感特别舒服。应用商店搜「Goodnotes极速版」，注册后点左下角「超值权益 立即兑换」，填邀请码免费拿一个月会员。',
+    '朋友！快去吃这个安利！Goodnotes极速版手写体验真的绝了，而且笔记可以无限建，跨平台同步超快。你去应用商店下载，注册后点左下角「超值权益 立即兑换」，输我邀请码能白嫖一个月会员！快冲！',
+    '推荐个手写笔记神器「Goodnotes极速版」：\n✅ 笔记数量无上限，随便建不心疼\n✅ 跨平台超高速云同步\n✅ 笔刷手感广受好评，像在纸上写\n应用商店搜「Goodnotes极速版」→注册→点左下角「超值权益 立即兑换」→填邀请码，免费领一个月会员。',
+    '开会记笔记、画思维导图，Goodnotes极速版 真的好用。笔记无上限，多设备同步快，笔刷手感也很跟手。应用商店搜「Goodnotes极速版」，注册后点「超值权益 立即兑换」，输入邀请码免费领一个月会员，试试不亏。',
+    '别再用系统备忘录了！Goodnotes极速版 笔记能无限建，同步快得像本地文件，笔刷手感好到想多写两页。应用商店搜「Goodnotes极速版」，注册后戳左下角「超值权益 立即兑换」，填邀请码免费薅一个月会员——但活动随时可能结束，手慢无。',
+    '最近一直在用 Goodnotes极速版 做手账和学习笔记，三个点特别打动我：笔记可以无限创建，多设备同步真的很快，手写笔刷的触感反馈很舒服。如果你也在找手写笔记App，应用商店搜「Goodnotes极速版」，注册后点左下角「超值权益 立即兑换」，填邀请码免费体验一个月会员。',
+    'Goodnotes极速版｜手写笔记无上限，跨平台同步飞快，笔刷手感超赞。应用商店搜索下载，注册后点「超值权益 立即兑换」，输入邀请码免费领一个月会员。',
+    '昨天在咖啡厅用 iPad 记了一下午笔记，回家打开另一台设备居然已经同步好了，一点没丢。Goodnotes极速版 这个云同步速度真的离谱，而且笔记随便建、笔刷手感也很绝。应用商店搜「Goodnotes极速版」，注册后点左下角「超值权益 立即兑换」，填邀请码免费领一个月会员。',
+    '用过好几款笔记App，Goodnotes极速版 目前最顺手：笔记无上限（不像别的App要付费扩容）、云同步跨平台几乎无延迟、笔刷手感被很多人夸过。应用商店搜「Goodnotes极速版」，注册后点「超值权益 立即兑换」，邀请码填上，免费拿一个月会员试试。',
+    '最近发现 Goodnotes极速版 有个限时新人福利，应用商店下载注册后，点左下角「超值权益 立即兑换」填邀请码能免费领一个月会员。笔记无上限、跨平台秒同步、笔刷手感好，这三个卖点确实能打。需要的自取，活动随时结束。',
+    '推荐个工具：Goodnotes极速版。笔记无限建，多设备同步快，手写笔刷手感在线。应用商店搜「Goodnotes极速版」，注册后点「超值权益 立即兑换」，输邀请码，免费领一个月会员。好用。',
+    '📝 安利一个好用的手写笔记App！\nGoodnotes极速版真的香——\n🔹 笔记无上限，随便建！\n🔹 跨平台超高速云同步！\n🔹 笔刷手感，广受好评！\n应用商店搜「Goodnotes极速版」→注册→点左下角「超值权益 立即兑换」→填邀请码，免费领一个月会员🎉'
+  ];
+  function promoText(idx, code) { return PROMOS[idx] + '\n\n邀请码⬇️\n' + (code || ''); }
+
+  // 推广文案控件：随机展示一条，可「换一条」，可复制（含邀请码）
+  function makePromo(previewSel, changeSel, copySel, getCode) {
+    let idx = Math.floor(Math.random() * PROMOS.length);
+    const render = () => { $(previewSel).textContent = promoText(idx, getCode()); };
+    $(changeSel).addEventListener('click', () => {
+      let n; do { n = Math.floor(Math.random() * PROMOS.length); } while (n === idx && PROMOS.length > 1);
+      idx = n; render();
+    });
+    $(copySel).addEventListener('click', e => copyText($(previewSel).textContent, e.target));
+    return { reroll() { idx = Math.floor(Math.random() * PROMOS.length); render(); } };
+  }
+
+  // 复制邀请码到剪贴板 + toast
+  let toastTimer = null;
+  function showToast(msg) {
+    let t = $('#copyToast');
+    if (!t) { t = document.createElement('div'); t.id = 'copyToast'; t.className = 'copy-toast'; document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+  }
+  async function copyCode(code, btn) {
+    let ok = false;
+    try { await navigator.clipboard.writeText(code); ok = true; }
+    catch {
+      try { const ta = document.createElement('textarea'); ta.value = code; ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); document.body.removeChild(ta); } catch {}
+    }
+    showToast(ok ? '已复制邀请码 ' + code : '复制失败，请长按手动复制');
+    if (ok && btn) { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 800); }
+  }
+
+  // ---------- 视图切换 ----------
+  function hideAll() {
+    for (const id of ['notStartedView', 'endedLoginView', 'hubView']) $('#' + id).style.display = 'none';
+  }
+  function setTopBtn(text, handler) {
+    const b = $('#topBtn');
+    if (!text) { b.style.display = 'none'; return; }
+    b.style.display = ''; b.textContent = text;
+    b.onclick = handler;
+  }
+
+  async function applyState() {
+    hideAll();
+    const phase = META.phase;
+    LOGGED = !!getSaved().rankToken;
+
+    if (phase === 'not_started') return renderNotStarted();
+    if (phase === 'ended' && !LOGGED) return renderEndedLogin();
+    return renderHub(phase); // running（任意登录态）或 ended+已登录
+  }
+
+  // 阶段A：未开始
+  function renderNotStarted() {
+    $('#notStartedView').style.display = 'block';
+    setTopBtn(null);
+    if (getSaved().reported || getSaved().rankToken) {
+      $('#preRegForm').style.display = 'none';
+      $('#preRegDone').style.display = 'block';
+    } else {
+      $('#preRegForm').style.display = 'block';
+      $('#preRegDone').style.display = 'none';
+    }
+  }
+
+  // 阶段C-未登录：已结束 + 登录
+  function renderEndedLogin() {
+    $('#endedLoginView').style.display = 'block';
+    setTopBtn(null);
+  }
+
+  // 阶段B/C-已登录：榜单 + 战绩
+  function renderHub(phase) {
+    $('#hubView').style.display = 'block';
+    $('#endedBanner').style.display = phase === 'ended' ? 'block' : 'none';
+
+    if (LOGGED) {
+      setTopBtn('退出登录', () => { clearClaim(); location.reload(); });
+      $('#tabMe').textContent = '📊 我的战绩';
+    } else {
+      // 仅进行中允许报名（结束态未登录已在 renderEndedLogin 处理，不会到这）
+      setTopBtn('我要报名！', openReport);
+      $('#tabMe').textContent = '🔑 登录';
+    }
+    // 邀请码 + 推广文案栏：登录且进行中时常驻主标题下
+    const showInvite = LOGGED && phase === 'running';
+    $('#inviteBar').style.display = showInvite ? 'block' : 'none';
+    if (showInvite) {
+      $('#myCodeCopy').textContent = getSaved().code || '';
+      if (mePromo) mePromo.reroll();
+    }
+    switchTab('board');
+    loadBoard();
+    if (LOGGED) loadMe();
+  }
+
+  function switchTab(tab) {
+    // 未登录点“登录”标签 → 打开登录弹窗，不切面板
+    if (tab === 'me' && !LOGGED) { openLogin(); return; }
+    document.querySelectorAll('.hub-tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    $('[data-panel=board]').style.display = tab === 'board' ? 'block' : 'none';
+    $('[data-panel=me]').style.display = tab === 'me' ? 'block' : 'none';
+  }
+  document.querySelectorAll('.hub-tabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+  // ---------- 排行榜 ----------
+  function renderBoard(d) {
+    if (!d.hasData) {
+      const e = $('#lbEmpty'); e.textContent = '当前暂无排行信息，排行榜每小时更新，敬请期待！'; e.style.display = 'block';
+      $('#lbTable').style.display = 'none';
+      return;
+    }
+    $('#snapInfo').textContent = `数据更新于 ${d.snapAt || d.snapDate} · ${d.note}`;
+    const myCode = (getSaved().code || '').toString();
+    const tbody = $('#lbBody'); tbody.innerHTML = '';
+    for (const row of d.top) {
+      const tr = document.createElement('tr');
+      if (row.rank <= 3) tr.className = 'top' + row.rank;
+      const isMe = myCode && row.code === myCode;
+      if (isMe) tr.classList.add('me');
+      const rankCell = medals[row.rank] ? `<span class="medal">${medals[row.rank]}</span>${row.rank}` : row.rank;
+      tr.innerHTML = `<td class="rank">${rankCell}</td><td class="code-cell"></td><td class="prize"></td>`;
+      const codeCell = tr.children[1];
+      if (row.code) {
+        const btn = document.createElement('button');
+        btn.className = 'code-copy'; btn.type = 'button'; btn.textContent = row.code; btn.title = '点击复制邀请码';
+        btn.addEventListener('click', () => copyCode(row.code, btn));
+        codeCell.appendChild(btn);
+      } else { const s = document.createElement('div'); s.textContent = '—'; codeCell.appendChild(s); }
+      const sub = document.createElement('div'); sub.className = 'code-sub';
+      sub.textContent = `已邀请 ${row.score} 人` + (isMe ? '（我）' : '');
+      codeCell.appendChild(sub);
+      const prizeCell = tr.children[2];
+      if (row.prize && row.prize.prize) {
+        prizeCell.innerHTML = `<span class="prize-label"></span><span class="prize-name"></span>`;
+        prizeCell.querySelector('.prize-label').textContent = row.rank <= 3 ? (row.prize.label || '') : '';
+        prizeCell.querySelector('.prize-name').textContent = row.prize.prize;
+      } else { prizeCell.innerHTML = `<span class="prize-none">—</span>`; }
+      tbody.appendChild(tr);
+    }
+    $('#lbTable').style.display = 'table';
+    $('#lbNote').textContent = '若邀请人数相同，则按报名时间先后排序';
+  }
+  async function loadBoard() {
+    const d = await api('/api/leaderboard');
+    if (d && d.ok) { BOARD = d; renderBoard(d); }
+  }
+
+  // ---------- 我的战绩 ----------
+  function renderMe(d) {
+    if (!d.hasData) {
+      $('#meResult').style.display = 'none';
+      $('#mePending').style.display = 'block';
+      $('#mePendingMsg').textContent = d.msg || '数据每小时更新，请耐心等待。';
+      return;
+    }
+    ME = d;
+    $('#mePending').style.display = 'none';
+    $('#meResult').style.display = 'block';
+    $('#myRank').textContent = d.rank;
+    $('#myScore').textContent = d.score;
+    $('#mySnapDate').textContent = `数据更新于 ${d.snapAt || d.snapDate}`;
+    // 排名数字：前三名奖牌配色
+    $('#rankBig').className = 'rank-big' + (MEDALS[d.rank] ? ' ' + MEDALS[d.rank] : '');
+
+    // 不可叠加：只显示当前对应的“单档”奖励
+    const hasRankPrize = d.rankPrize && d.rankPrize.prize;
+    const reached = d.tiers.filter(t => t.reached);
+    const maxTier = d.tiers.length ? d.tiers[d.tiers.length - 1] : null;
+    const reachedMax = maxTier && d.score >= maxTier.score;
+    let mainText, noteText;
+    if (hasRankPrize) {
+      mainText = d.rankPrize.prize;
+      noteText = '冲榜奖与达标奖不可叠加，最终以冲榜奖发放。';
+    } else if (reached.length) {
+      mainText = reached[reached.length - 1].name;
+      if (reachedMax) noteText = '已达最高达标档；若冲进前十名，将改发对应冲榜奖（二者不叠加）。';
+      else { const next = d.tiers.find(t => !t.reached); noteText = `再邀请 ${next.gap} 人可升级为「${next.name}」。`; }
+    } else {
+      const next = d.tiers.find(t => !t.reached) || d.tiers[0];
+      mainText = '暂无奖励';
+      noteText = next ? `距离「${next.name}」还需邀请 ${next.gap} 位用户，继续加油！` : '继续邀请好友，冲榜赢大奖！';
+    }
+    $('#rewardMain').textContent = mainText;
+    $('#rewardNote').textContent = noteText;
+    // 奖励卡片配色：前三名奖牌色；无奖则中性
+    $('#rewardCard').className = 'reward-card' + (hasRankPrize && MEDALS[d.rank] ? ' ' + MEDALS[d.rank] : '');
+    // 领奖：仅活动结束后开放，且需有可领奖励
+    ME.hasReward = hasRankPrize || reached.length > 0;
+    const ended = (META && META.phase) === 'ended';
+    $('#openPrizeBtn').classList.toggle('is-disabled', !(ended && ME.hasReward));
+    $('#prizeHint').textContent = ended
+      ? (ME.hasReward ? '请在结算后一周内填写领奖信息' : '你当前没有可领取的奖励')
+      : '领奖将在活动结束后开放';
+  }
+  async function loadMe() {
+    const saved = getSaved();
+    if (!saved.rankToken) return;
+    const d = await api('/api/myrank', { rankToken: saved.rankToken });
+    if (d && d.ok) {
+      saveClaim({ code: d.code, rankToken: d.rankToken });
+      renderMe(d);
+      // 刷新常驻邀请码栏（覆盖开始前报名时保存的空码）
+      if ($('#inviteBar').style.display !== 'none' && d.code) {
+        $('#myCodeCopy').textContent = d.code;
+        if (mePromo) mePromo.reroll();
+      }
+      if (BOARD) renderBoard(BOARD);
+    } else if (d && d.needAuth) { clearClaim(); location.reload(); }
+  }
+
+  // ---------- 报名弹窗（进行中） ----------
+  const rpCaptcha = initCaptcha($('#rpCaptcha'));
+  function openReport() {
+    hideAlert($('#reportAlert'));
+    $('#reportForm').style.display = 'block';
+    $('#reportDone').style.display = 'none';
+    $('#rpUid').value = ''; $('#rpAgree').checked = false; $('#rpUidErr').style.display = 'none';
+    rpCaptcha.refresh();
+    $('#reportMask').classList.add('show');
+  }
+  $('#rpCancel').addEventListener('click', () => $('#reportMask').classList.remove('show'));
+  $('#rpSubmit').addEventListener('click', async () => {
+    hideAlert($('#reportAlert'));
+    const uid = $('#rpUid').value.trim();
+    if (!UUID_RE.test(uid)) { const e = $('#rpUidErr'); e.textContent = '用户ID格式不正确，请到App「设置-关于」页复制完整的用户ID'; e.style.display = 'block'; return; }
+    $('#rpUidErr').style.display = 'none';
+    if (!$('#rpAgree').checked) return showAlert($('#reportAlert'), 'error', '请先阅读并同意《活动参与规则》');
+    if (!rpCaptcha.answer) return showAlert($('#reportAlert'), 'error', '请填写验证码');
+    const btn = $('#rpSubmit'); btn.disabled = true; btn.textContent = '提交中…';
+    const reg = await api('/api/register', { uid, agree: true, captchaToken: rpCaptcha.token, captchaAnswer: rpCaptcha.answer });
+    if (!reg.ok) { btn.disabled = false; btn.textContent = '确认报名，领取邀请码'; showAlert($('#reportAlert'), 'error', reg.msg); rpCaptcha.refresh(); return; }
+    const cl = await api('/api/claim', { confirmToken: reg.confirmToken });
+    btn.disabled = false; btn.textContent = '确认报名，领取邀请码';
+    if (!cl.ok) { showAlert($('#reportAlert'), 'error', cl.msg); rpCaptcha.refresh(); return; }
+    saveClaim({ code: cl.code, rankToken: cl.rankToken });
+    $('#reportForm').style.display = 'none';
+    $('#reportDone').style.display = 'block';
+    $('#rpCode').textContent = cl.code || '';
+    rpPromo.reroll(); // 报名成功后随机展示一条文案
+  });
+  $('#rpCopyCodeBtn').addEventListener('click', e => copyText($('#rpCode').textContent, e.target));
+  $('#rpDoneBtn').addEventListener('click', () => { $('#reportMask').classList.remove('show'); location.reload(); });
+  $('#rpOpenRules').addEventListener('click', () => $('#rulesMask').classList.add('show'));
+
+  // ---------- 登录弹窗 ----------
+  const lgCaptcha = initCaptcha($('#lgCaptcha'));
+  function openLogin() {
+    hideAlert($('#loginAlert'));
+    $('#lgUid').value = ''; lgCaptcha.refresh();
+    $('#loginMask').classList.add('show');
+  }
+  $('#lgCancel').addEventListener('click', () => $('#loginMask').classList.remove('show'));
+  $('#lgSubmit').addEventListener('click', async () => {
+    hideAlert($('#loginAlert'));
+    const uid = $('#lgUid').value.trim();
+    if (!uid) return showAlert($('#loginAlert'), 'error', '请填写用户ID');
+    if (!lgCaptcha.answer) return showAlert($('#loginAlert'), 'error', '请填写验证码');
+    const btn = $('#lgSubmit'); btn.disabled = true; btn.textContent = '登录中…';
+    const d = await api('/api/recover', { uid, captchaToken: lgCaptcha.token, captchaAnswer: lgCaptcha.answer });
+    btn.disabled = false; btn.textContent = '登录';
+    if (!d.ok) { showAlert($('#loginAlert'), 'error', d.msg); lgCaptcha.refresh(); return; }
+    saveClaim({ code: d.code, rankToken: d.rankToken });
+    location.reload();
+  });
+
+  // ---------- 结束态未登录：内联登录 ----------
+  const elCaptcha = initCaptcha($('#elCaptcha'));
+  $('#elLogin').addEventListener('click', async () => {
+    hideAlert($('#elAlert'));
+    const uid = $('#elUid').value.trim();
+    if (!uid) return showAlert($('#elAlert'), 'error', '请填写用户ID');
+    if (!elCaptcha.answer) return showAlert($('#elAlert'), 'error', '请填写验证码');
+    const btn = $('#elLogin'); btn.disabled = true; btn.textContent = '登录中…';
+    const d = await api('/api/recover', { uid, captchaToken: elCaptcha.token, captchaAnswer: elCaptcha.answer });
+    btn.disabled = false; btn.textContent = '登录';
+    if (!d.ok) { showAlert($('#elAlert'), 'error', d.msg); elCaptcha.refresh(); return; }
+    saveClaim({ code: d.code, rankToken: d.rankToken });
+    location.reload();
+  });
+
+  // ---------- 未开始：内联报名 ----------
+  const nsCaptcha = initCaptcha($('#nsCaptcha'));
+  $('#nsSubmit').addEventListener('click', async () => {
+    const uid = $('#nsUid').value.trim();
+    if (!UUID_RE.test(uid)) { const e = $('#nsUidErr'); e.textContent = '用户ID格式不正确，请到App「设置-关于」页复制完整的用户ID'; e.style.display = 'block'; return; }
+    $('#nsUidErr').style.display = 'none';
+    if (!nsCaptcha.answer) return showAlert($('#nsAlert'), 'error', '请填写验证码');
+    const btn = $('#nsSubmit'); btn.disabled = true; btn.textContent = '提交中…';
+    // 报名/登录二合一：没报过名→报名领码；报过名→登录
+    const d = await api('/api/join', { uid, captchaToken: nsCaptcha.token, captchaAnswer: nsCaptcha.answer });
+    btn.disabled = false; btn.textContent = '报名 / 登录';
+    if (!d.ok) { showAlert($('#nsAlert'), 'error', d.msg); nsCaptcha.refresh(); return; }
+    hideAlert($('#nsAlert'));
+    saveClaim({ code: d.code, rankToken: d.rankToken, reported: true }); // 未开始阶段 code 为 null，仅记录已报名
+    $('#preRegForm').style.display = 'none';
+    $('#preRegDone').style.display = 'block';
+  });
+  $('#nsOpenRules').addEventListener('click', () => $('#rulesMask').classList.add('show'));
+
+  // ---------- 领奖信息弹窗 ----------
+  function needShipping() { return !!(ME && ME.rankPrize && ME.rankPrize.prize); } // 前十名需填收件信息
+  $('#openPrizeBtn').addEventListener('click', () => {
+    if ((META && META.phase) !== 'ended') { showToast('领奖将在活动结束后开放，敬请期待～'); return; }
+    if (!ME || !ME.hasReward) { showToast('您当前没有可领取的奖励，请下次继续加油！'); return; }
+    hideAlert($('#prizeAlert'));
+    $('#pzShipping').style.display = needShipping() ? 'block' : 'none';
+    $('#prizeMask').classList.add('show');
+  });
+  $('#pzCancel').addEventListener('click', () => $('#prizeMask').classList.remove('show'));
+  $('#pzSubmit').addEventListener('click', async () => {
+    hideAlert($('#prizeAlert'));
+    const xhs = $('#pzXhs').value.trim();
+    if (!xhs) return showAlert($('#prizeAlert'), 'error', '请填写小红书号');
+    const body = { rankToken: getSaved().rankToken, xhs };
+    if (needShipping()) {
+      const name = $('#pzName').value.trim(), phone = $('#pzPhone').value.trim(), address = $('#pzAddr').value.trim();
+      if (!name || !phone || !address) return showAlert($('#prizeAlert'), 'error', '收件信息为必填项，请完整填写');
+      body.name = name; body.phone = phone; body.address = address;
+    }
+    const btn = $('#pzSubmit'); btn.disabled = true; btn.textContent = '提交中…';
+    const d = await api('/api/winner-info', body);
+    btn.disabled = false; btn.textContent = '提交领奖信息';
+    if (!d.ok) return showAlert($('#prizeAlert'), 'error', d.msg);
+    showAlert($('#prizeAlert'), 'ok', d.msg);
+    setTimeout(() => $('#prizeMask').classList.remove('show'), 1500);
+  });
+
+  // ---------- 规则弹窗 ----------
+  $('#rulesClose').addEventListener('click', () => $('#rulesMask').classList.remove('show'));
+  $('#rulesX').addEventListener('click', () => $('#rulesMask').classList.remove('show'));
+  $('#rulesBtn').addEventListener('click', () => $('#rulesMask').classList.add('show'));
+
+  // ---------- 推广文案控件（我的战绩 / 报名成功 各一套）----------
+  mePromo = makePromo('#mePromoPreview', '#mePromoChange', '#mePromoCopy', () => $('#myCodeCopy').textContent);
+  rpPromo = makePromo('#rpPromoPreview', '#rpPromoChange', '#rpPromoCopy', () => $('#rpCode').textContent);
+  $('#myCopyCodeBtn').addEventListener('click', e => copyText($('#myCodeCopy').textContent, e.target));
+
+  // ---------- 启动 ----------
+  (async () => {
+    META = await api('/api/meta');
+    if (!META || !META.ok) { showAlert($('#pageAlert'), 'error', '加载失败，请刷新重试'); return; }
+    if (META.heroTitle) $('#heroTitle').textContent = META.heroTitle;
+    if (META.heroSlogan) $('#heroSlogan').textContent = META.heroSlogan;
+    await applyState();
+  })();
+})();
+</script>
+</body>
+</html>

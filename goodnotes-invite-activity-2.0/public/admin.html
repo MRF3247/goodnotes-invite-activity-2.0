@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>活动后台 · Goodnotes极速版</title>
+<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/style.css?v=7">
+<style>.pager{display:flex;gap:8px;align-items:center;flex-wrap:wrap}</style>
+</head>
+<body>
+<div class="page admin-page">
+  <header class="site-header">
+    <div class="brand">
+      <img class="brand-icon" src="/assets/icon.svg" alt="">
+      <img class="brand-word" src="/assets/logo-black.svg" alt="Goodnotes极速版">
+    </div>
+    <span class="badge">活动后台</span>
+  </header>
+
+  <!-- 登录 -->
+  <div class="card" id="loginCard" style="max-width:420px;margin:40px auto">
+    <h2>管理员登录</h2>
+    <div id="loginAlert" class="alert"></div>
+    <label for="tokenInput">访问口令</label>
+    <input type="password" id="tokenInput" autocomplete="off">
+    <button class="btn block" id="loginBtn" style="margin-top:14px">登录</button>
+  </div>
+
+  <div id="adminMain" style="display:none">
+    <div class="tabs" id="tabs">
+      <button data-tab="overview" class="active">总览</button>
+      <button data-tab="activity">活动管理</button>
+      <button data-tab="accounts">账号管理</button>
+      <button data-tab="invcodes">邀请码管理</button>
+      <button data-tab="codes">邀请码导入</button>
+      <button data-tab="sync">数据与风控</button>
+      <button data-tab="query">查询/修正</button>
+      <button data-tab="shadow">激励号</button>
+      <button data-tab="rewards">奖励设置</button>
+      <button data-tab="settings">活动设置</button>
+      <button data-tab="logs">操作日志</button>
+    </div>
+    <div id="globalAlert" class="alert"></div>
+
+    <!-- 总览 -->
+    <section data-panel="overview">
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="card">
+        <h2>活动开关</h2>
+        <p class="muted" style="margin-bottom:12px">当前状态：<b id="statusNow">—</b>。默认「自动」按「活动管理」里设置的北京时间自动切换；下方按钮可临时强制覆盖。</p>
+        <div class="form-row">
+          <button class="btn small" data-status="auto">🕒 自动（按时间）</button>
+          <button class="btn small secondary" data-status="running">▶ 强制进行中</button>
+          <button class="btn small secondary" data-status="notstarted">强制未开始</button>
+          <button class="btn small danger" data-status="ended">■ 强制已结束</button>
+        </div>
+        <div id="statusResult" class="alert" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>榜单快照（完整排行）</h2>
+        <p class="muted" style="margin-bottom:10px">最近更新：<span id="lastSnap">—</span></p>
+        <p class="hint" style="margin-bottom:10px">榜单数据由 CC 每小时从表B清洗后按邀请码推入；无人值守时推入后约 30 分钟自动更新到前台，也可点下面「立即刷新榜单」马上生效。下表为完整排行（含激励号，已标注）。</p>
+        <button class="btn small" id="refreshBoardBtn">立即刷新榜单</button>
+        <div id="snapResult" class="alert" style="margin-top:10px"></div>
+        <div class="table-wrap" style="margin-top:12px">
+          <table class="admin-table" id="snapTable" style="display:none">
+            <thead><tr><th style="width:64px">排名</th><th>邀请码</th><th style="width:90px">邀请人数</th><th style="width:90px">类型</th></tr></thead>
+            <tbody id="snapBody"></tbody>
+          </table>
+        </div>
+        <div id="snapPager" class="pager" style="margin-top:10px;display:none"></div>
+        <p class="muted" id="snapEmpty" style="display:none">暂无榜单数据。</p>
+      </div>
+      <div class="card">
+        <h2>导出活动全量数据</h2>
+        <p class="hint" style="margin-bottom:12px">导出<b>完整排行（含激励号，已在"类型"列标注）</b>：排名、昵称、UID、小红书号、邀请码、邀请人数、名次奖/达标奖/最终奖励、领奖收件信息、备注（CSV，Excel 可打开）。文件名含<b style="color:var(--danger)">【严禁外传】</b>，内含 UID 等隐私，仅限内部核奖使用。</p>
+        <a class="btn small secondary" href="/api/admin/export" style="text-decoration:none">下载活动数据 CSV</a>
+      </div>
+    </section>
+
+    <!-- 活动管理 -->
+    <section data-panel="activity" style="display:none">
+      <div class="card">
+        <h2>活动开关与时间（北京时间）</h2>
+        <div class="form-row">
+          <div><label>活动状态</label>
+            <select id="actStatus"><option value="auto">自动（按下方时间判断·推荐）</option><option value="running">强制进行中</option><option value="notstarted">强制未开始</option><option value="ended">强制已结束</option></select>
+          </div>
+          <div><label>开始时间（YYYY-MM-DD HH:MM，北京时间）</label><input type="text" id="actStart" placeholder="2026-07-16 16:00"></div>
+          <div><label>结束时间（YYYY-MM-DD HH:MM，北京时间）</label><input type="text" id="actEnd" placeholder="2026-07-23 24:00"></div>
+        </div>
+        <button class="btn small" id="actSaveBtn" style="margin-top:10px">保存活动开关/时间</button>
+        <div id="actSaveResult" class="alert" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h2>邀请码批次（batchId）</h2>
+        <p class="hint" style="margin-bottom:8px">填本次活动的 batchId，多个用逗号或换行分隔（每批上限1000个码，多批可扩容）。保存后点"立即拉取"从后端导入。</p>
+        <textarea id="actBatchIds" placeholder="332801840767348736&#10;332432971819757568"></textarea>
+        <div class="form-row" style="margin-top:8px">
+          <div><label>拉取频率（分钟）</label><input type="number" id="actInterval" min="5" value="60"></div>
+          <div><label>错峰发布延迟（分钟，拉取后延迟多久上前台）</label><input type="number" id="actDelay" min="0" value="30"></div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn small" id="actSaveBatchBtn">保存批次/频率</button>
+          <button class="btn small" id="actPullBtn">立即拉取/导入</button>
+          <button class="btn small accent" id="actPublishBtn">立即发布到前台</button>
+        </div>
+        <div id="actPullResult" class="alert" style="margin-top:10px"></div>
+        <p class="hint" style="margin-top:8px">最近拉取：<b id="actLastPull">—</b>；最近发布：<b id="actLastPublish">—</b>；待发布排期：<b id="actPendingReady">—</b></p>
+      </div>
+
+      <div class="card">
+        <h2>邀请码清单</h2>
+        <p class="muted" style="margin-bottom:8px">系统内邀请码总数：<b id="actCodesTotalAll">—</b><span id="actCodesFiltered"></span></p>
+        <div class="form-row" style="margin-bottom:8px">
+          <div style="flex:2"><input type="text" id="actCodeFilter" placeholder="按 batchId 过滤（留空=全部）"></div>
+          <div style="flex:none"><button class="btn small" id="actCodesBtn">查看邀请码</button></div>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table" id="actCodesTable" style="display:none">
+            <thead><tr><th>邀请码</th><th>批次</th><th>邀请人数(待发布)</th><th>已发布</th><th>人工修正</th><th>封顶</th><th>明细</th></tr></thead>
+            <tbody id="actCodesBody"></tbody>
+          </table>
+        </div>
+        <div id="actCodesPager" class="pager" style="margin-top:10px;display:none"></div>
+        <p class="muted" id="actCodesEmpty" style="display:none">暂无数据。</p>
+      </div>
+
+      <div class="card">
+        <h2>后台兑换榜（含违规预警）</h2>
+        <p class="hint" style="margin-bottom:8px">按兑换次数排序（含人工修正）。<b style="color:var(--danger)">红色预警</b>=该码的兑换里有"同IP/同设备被多个账号使用"的刷码嫌疑；可就地"调分"扣除违规分（负数），扣分持久、不被下次拉取覆盖。阈值在「活动设置」调。</p>
+        <button class="btn small" id="actLbBtn">刷新兑换榜</button>
+        <div class="table-wrap" style="margin-top:10px">
+          <table class="admin-table" id="actLbTable" style="display:none">
+            <thead><tr><th>#</th><th>邀请码</th><th>归属昵称</th><th>兑换数</th><th>修正</th><th>实际分</th><th>违规预警</th><th>操作</th></tr></thead>
+            <tbody id="actLbBody"></tbody>
+          </table>
+        </div>
+        <div id="actLbResult" class="alert" style="margin-top:10px"></div>
+      </div>
+
+      <!-- 单码明细弹窗 -->
+      <div id="actDetailModal" style="display:none;margin-top:6px" class="card">
+        <h2>兑换明细 · <span id="actDetailCode"></span> <button class="btn small secondary" id="actDetailClose" style="float:right">收起</button></h2>
+        <p class="hint" id="actDetailNote" style="margin-bottom:8px"></p>
+        <div class="table-wrap">
+          <table class="admin-table"><thead><tr><th>用户UID</th><th>IP</th><th>设备ID</th><th>兑换时间(北京)</th></tr></thead><tbody id="actDetailBody"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 账号管理 -->
+    <section data-panel="accounts" style="display:none">
+      <div class="card">
+        <h2>账号管理</h2>
+        <p class="hint" style="margin-bottom:8px">按报名顺序列出账号（UID / 小红书号 / 收件信息 / 邀请码 / 邀请人数）。<b>删除邀请码</b>=清空该账号的邀请码及邀请人数；<b>删除账号</b>=删除 UID 及其全部关联信息。两种删除都<b>可在 5 天内恢复</b>，超期彻底清除。</p>
+        <div class="form-row" style="margin-bottom:8px">
+          <div style="flex:2"><input type="text" id="acctSearch" placeholder="搜索 UID / 小红书号 / 邀请码（留空=全部）"></div>
+          <div style="flex:none"><button class="btn small" id="acctSearchBtn">查询</button></div>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table" id="acctTable" style="display:none">
+            <thead><tr><th>#</th><th>UID</th><th>小红书号</th><th>收件信息</th><th>邀请码</th><th>邀请人数</th><th>操作</th></tr></thead>
+            <tbody id="acctBody"></tbody>
+          </table>
+        </div>
+        <div id="acctPager" class="pager" style="margin-top:10px;display:none"></div>
+        <p class="muted" id="acctEmpty" style="display:none">暂无账号。</p>
+      </div>
+      <div class="card">
+        <h2>🗑 回收站（5 天内可恢复）</h2>
+        <button class="btn small secondary" id="recycleRefresh">刷新回收站</button>
+        <div class="table-wrap" style="margin-top:10px">
+          <table class="admin-table" id="recycleTable" style="display:none">
+            <thead><tr><th>类型</th><th>对象</th><th>删除时间</th><th>剩余</th><th>操作</th></tr></thead>
+            <tbody id="recycleBody"></tbody>
+          </table>
+        </div>
+        <p class="muted" id="recycleEmpty" style="display:none">回收站为空。</p>
+      </div>
+    </section>
+
+    <!-- 邀请码管理 -->
+    <section data-panel="invcodes" style="display:none">
+      <div class="card">
+        <h2>邀请码管理</h2>
+        <p class="hint" style="margin-bottom:8px">列出所有邀请码及其邀请人数、归属账号。<b>清除</b>=清空该邀请码及邀请人数（同「账号管理」里的删除邀请码，5 天内可恢复）。</p>
+        <div class="form-row" style="margin-bottom:8px">
+          <div style="flex:2"><input type="text" id="invSearch" placeholder="搜索邀请码（留空=全部）"></div>
+          <div style="flex:none"><label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="invAssignedOnly">只看已发放</label></div>
+          <div style="flex:none"><button class="btn small" id="invSearchBtn">查询</button></div>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table" id="invTable" style="display:none">
+            <thead><tr><th>邀请码</th><th>邀请人数</th><th>归属账号(UID)</th><th>操作</th></tr></thead>
+            <tbody id="invBody"></tbody>
+          </table>
+        </div>
+        <div id="invPager" class="pager" style="margin-top:10px;display:none"></div>
+        <p class="muted" id="invEmpty" style="display:none">暂无邀请码。</p>
+      </div>
+    </section>
+
+    <!-- 邀请码导入 -->
+    <section data-panel="codes" style="display:none">
+      <div class="card">
+        <h2>① 下载模板</h2>
+        <p class="hint" style="margin-bottom:12px">单列：邀请码。把后端生成的邀请码填进去后，在下方导入。生效期由后端系统管理，本系统不设日期。</p>
+        <a class="btn small secondary" href="/api/admin/codes/template" style="text-decoration:none">下载 CSV 模板</a>
+      </div>
+      <div class="card">
+        <h2>② 导入邀请码</h2>
+        <input type="file" id="codesFile" accept=".csv,text/csv" style="margin-bottom:6px">
+        <p class="hint" id="codesFileInfo" style="margin-bottom:10px">请选择填好的CSV文件（支持大文件，内容不会显示在页面上）</p>
+        <button class="btn small" id="codesImportBtn">导入</button>
+        <div id="codesResult" class="alert" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <!-- 数据与风控 -->
+    <section data-panel="sync" style="display:none">
+      <div class="card">
+        <h2>① 导入后端每日数据</h2>
+        <p class="hint" style="margin-bottom:10px">每天从后端拿到两张表后在此导入（<b>全量覆盖</b>上一次导入的数据）。支持带表头，选文件或直接粘贴。</p>
+        <div class="form-row">
+          <div>
+            <label>表1 · 兑换明细（code,userId）</label>
+            <input type="file" id="redFile" accept=".csv,text/csv" style="margin-bottom:6px">
+            <textarea id="redText" placeholder="code,userId&#10;AB12CD34,019e95d8-..."></textarea>
+            <button class="btn small" id="redImportBtn" style="margin-top:8px">导入表1</button>
+          </div>
+          <div>
+            <label>表2 · 用户设备（userId,ip,deviceId）</label>
+            <input type="file" id="devFile" accept=".csv,text/csv" style="margin-bottom:6px">
+            <textarea id="devText" placeholder="userId,ip,deviceId&#10;019e95d8-...,1.2.3.4,DID-xxxx"></textarea>
+            <button class="btn small" id="devImportBtn" style="margin-top:8px">导入表2</button>
+          </div>
+        </div>
+        <div id="riskImportResult" class="alert" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h2>② 风控报告与人工审核</h2>
+        <p class="hint" style="margin-bottom:10px">检测三类异常：<b>同一设备多个UID兑换</b>（强信号，可直接判定违规）、<b>同一IP大量UID兑换</b>（弱信号，注意宿舍/公司WiFi误报，仅作线索）、<b>同一UID重复兑换</b>（按规则不应发生）。预警阈值在「活动设置」中调整。</p>
+        <button class="btn small" id="riskReportBtn">生成风控报告</button>
+        <div id="riskReportResult" class="alert" style="margin-top:10px"></div>
+        <div id="riskReportBody" style="display:none">
+          <h2 style="margin-top:16px">🔴 设备聚集（同一设备多个UID）</h2>
+          <div class="table-wrap"><table class="admin-table"><thead><tr><th>设备(DID)</th><th>UID数</th><th>涉及UID → 邀请码（归属昵称）</th></tr></thead><tbody id="devClusterBody"></tbody></table></div>
+          <h2 style="margin-top:16px">🟡 IP聚集（仅作线索）</h2>
+          <div class="table-wrap"><table class="admin-table"><thead><tr><th>IP</th><th>UID数</th><th>涉及UID → 邀请码（归属昵称）</th></tr></thead><tbody id="ipClusterBody"></tbody></table></div>
+          <h2 style="margin-top:16px">🟠 重复兑换的UID</h2>
+          <div class="table-wrap"><table class="admin-table"><thead><tr><th>UID</th><th>兑换次数</th><th>涉及邀请码</th></tr></thead><tbody id="dupUserBody"></tbody></table></div>
+        </div>
+        <hr class="divider">
+        <label>剔除违规UID（其兑换不计入任何邀请码的邀请人数；多个UID用逗号/换行分隔）</label>
+        <textarea id="excludeIds" placeholder="userId1&#10;userId2"></textarea>
+        <div class="form-row" style="margin-top:8px">
+          <div style="flex:3"><input type="text" id="excludeReason" placeholder="剔除原因（必填，记入操作日志）"></div>
+          <div style="flex:none"><button class="btn small danger" id="excludeBtn">剔除</button></div>
+        </div>
+        <div id="excludeResult" class="alert" style="margin-top:10px"></div>
+        <h2 style="margin-top:16px">已剔除名单</h2>
+        <div class="table-wrap"><table class="admin-table"><thead><tr><th>UID</th><th>原因</th><th>时间</th><th>操作</th></tr></thead><tbody id="excludedBody"></tbody></table></div>
+      </div>
+
+      <div class="card">
+        <h2>③ 发布榜单</h2>
+        <p class="hint" style="margin-bottom:10px">按剔除后的净数据计算每个邀请码的邀请人数（每码=去重后的兑换UID数），并立即刷新排行榜。<b>审核完成后再点击</b>。</p>
+        <button class="btn" id="publishBtn" style="min-width:220px">计算邀请人数并发布榜单</button>
+        <div id="publishResult" class="alert" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h2>应急：手动覆盖邀请人数</h2>
+        <p class="hint" style="margin-bottom:10px">数据出错时的修复通道：先下载当前数据表，改好数字后再上传覆盖（<b>绝对值覆盖</b>，第三列昵称仅供核对、不会导入）。改完到「总览」点“立即刷新榜单”生效。每次下载也相当于一份手动备份，建议大改前先留存。</p>
+        <a class="btn small secondary" href="/api/admin/sync/export" style="text-decoration:none;margin-bottom:12px;display:inline-flex">① 下载当前邀请人数表</a>
+        <p class="hint" style="margin-bottom:6px">② 上传修改后的文件（或手动粘贴小改动）：</p>
+        <input type="file" id="syncFile" accept=".csv,text/csv" style="margin-bottom:10px">
+        <textarea id="syncText" placeholder="邀请码,邀请人数&#10;AB12CD34,7"></textarea>
+        <button class="btn small secondary" id="syncImportBtn" style="margin-top:10px">③ 上传并覆盖</button>
+        <div id="syncResult" class="alert" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <!-- 查询/改分 -->
+    <section data-panel="query" style="display:none">
+      <div class="card">
+        <h2>查询参与者</h2>
+        <div class="form-row">
+          <div style="flex:3"><input type="text" id="searchInput" placeholder="输入邀请码 / 小红书号 / UID / 昵称"></div>
+          <div style="flex:none"><button class="btn small" id="searchBtn">查询</button></div>
+        </div>
+        <div class="table-wrap" style="margin-top:14px">
+          <table class="admin-table" id="searchTable" style="display:none">
+            <thead><tr><th>昵称</th><th>UID</th><th>小红书号</th><th>邀请码</th><th>兑换人数</th><th>修正</th><th>邀请人数</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="searchBody"></tbody>
+          </table>
+        </div>
+        <p class="muted" id="searchEmpty" style="display:none">没有找到匹配记录</p>
+      </div>
+    </section>
+
+    <!-- 激励号 -->
+    <section data-panel="shadow" style="display:none">
+      <div class="card">
+        <h2>新增激励号</h2>
+        <p class="hint" style="margin-bottom:10px">激励号会参与排行榜排序。<b>新增时会自动从码池占用一个真实邀请码</b>（展示在公开榜、可被真实兑换），请先确保「邀请码」里有足够余量。占用的码不走 CC 同步，邀请人数由下方“自动配分/手动设人数”决定。开启“自动配分”后，每次生成榜单会把它的人数自动调到设定名次区间内（区间在「活动设置」调）。</p>
+        <div class="form-row">
+          <div><label>昵称</label><input type="text" id="shNick" maxlength="20"></div>
+          <div><label>初始邀请人数</label><input type="number" id="shScore" value="0" min="0"></div>
+          <div style="flex:none;display:flex;align-items:center;gap:6px;padding-bottom:10px">
+            <input type="checkbox" id="shAuto" checked style="width:18px;height:18px;accent-color:var(--brand)"> <span style="font-size:14px">自动配分</span>
+          </div>
+          <div style="flex:none"><button class="btn small" id="shAddBtn">新增</button></div>
+        </div>
+        <div id="shAlert" class="alert" style="margin-top:10px"></div>
+      </div>
+      <div class="card">
+        <h2>激励号列表</h2>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>ID</th><th>昵称</th><th>占用邀请码</th><th>当前人数</th><th>自动配分</th><th>操作</th></tr></thead>
+            <tbody id="shBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 奖励设置 -->
+    <section data-panel="rewards" style="display:none">
+      <div class="card">
+        <h2>🏅 冲榜奖（名次奖）</h2>
+        <p class="hint" style="margin-bottom:10px">按最终排名发放，可自定义档位。改完点“保存奖励设置”即上架，报名页奖励一览与排行榜右侧会同步更新。名次可写区间（如 4–10 名同奖）。</p>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th style="width:70px">名次从</th><th style="width:70px">名次到</th><th style="width:110px">标签</th><th>奖品</th><th style="width:56px">操作</th></tr></thead>
+            <tbody id="rankPrizeBody"></tbody>
+          </table>
+        </div>
+        <button class="btn small secondary" id="rankPrizeAdd" style="margin-top:10px">+ 增加一档</button>
+      </div>
+      <div class="card">
+        <h2>🎁 达标奖（拉 N 人得 N 月）</h2>
+        <p class="hint" style="margin-bottom:10px">按累计邀请人数达标发放，只兑现最高完成一档。可自定义档位。</p>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th style="width:120px">邀请人数达标</th><th>奖励名称</th><th style="width:56px">操作</th></tr></thead>
+            <tbody id="milestoneBody"></tbody>
+          </table>
+        </div>
+        <button class="btn small secondary" id="milestoneAdd" style="margin-top:10px">+ 增加一档</button>
+        <div style="margin-top:14px">
+          <button class="btn small" id="rewardsSaveBtn">保存奖励设置</button>
+        </div>
+        <div id="rewardsAlert" class="alert" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section data-panel="settings" style="display:none">
+      <div class="card">
+        <h2>活动设置</h2>
+        <div id="settingsForm"></div>
+        <button class="btn small" id="settingsSaveBtn" style="margin-top:14px">保存设置</button>
+        <div id="settingsAlert" class="alert" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <!-- 日志 -->
+    <section data-panel="logs" style="display:none">
+      <div class="card">
+        <h2>操作日志（最近200条）</h2>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th style="width:160px">时间</th><th style="width:120px">类型</th><th>详情</th></tr></thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="/js/common.js?v=2"></script>
+<script>
+(function () {
+  const SETTING_FIELDS = [
+    ['hero_title', '前台主标题', 'text'],
+    ['hero_slogan', '前台活动标语', 'text'],
+    ['capacity', '参与人数上限', 'number'],
+    ['update_note', '页面展示的更新频率文案', 'text'],
+    ['snapshot_time', '每日兜底刷新榜单时间（HH:MM，正常靠人工审核后发布）', 'text'],
+    ['risk_device_min', '风控预警：同设备兑换UID数 ≥（0=不预警）', 'number'],
+    ['risk_ip_min', '风控预警：同IP兑换UID数 ≥（0=不预警）', 'number'],
+    ['fail_threshold', '连续失败锁定阈值（次，0=不限制）', 'number'],
+    ['lock_steps', '阶梯锁定时长（分钟，逗号分隔）', 'text'],
+    ['query_limit_hour', '排名查询限额（次/UID/小时，0=不限制）', 'number'],
+    ['ip_limit_hour', '每IP每小时请求上限（0=不限制）', 'number'],
+    ['shadow_enabled', '激励号自动配分总开关（1开 0关）', 'text'],
+    ['shadow_rank_lo', '激励号目标名次上界（如1）', 'number'],
+    ['shadow_rank_hi', '激励号目标名次下界（如4）', 'number']
+  ];
+
+  function guardAuth(d) {
+    if (d && d.needLogin) {
+      $('#adminMain').style.display = 'none';
+      $('#loginCard').style.display = 'block';
+      return true;
+    }
+    return false;
+  }
+
+  async function loadOverview() {
+    const d = await api('/api/admin/overview');
+    if (guardAuth(d) || !d.ok) return;
+    const dateBlocked = d.codesFree - d.codesAvailable; // 未分配但不在生效期内的码
+    $('#statGrid').innerHTML = [
+      [d.claimed + ' / ' + d.capacity, '已报名 / 名额上限'],
+      [d.codesAvailable, '当前可分配邀请码'],
+      [d.codesFree, '未分配总数' + (dateBlocked > 0 ? `（${dateBlocked}个未生效/已过期）` : '')],
+      [d.codesTotal, '邀请码总数'],
+      [d.disqualified, '已取消资格']
+    ].map(([n, l]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+    if (d.codesAvailable === 0 && d.codesFree > 0) {
+      showAlert($('#globalAlert'), 'warn', `⚠️ 注意：池内有 ${d.codesFree} 个未分配邀请码，但没有一个在生效期内——用户现在领码会提示"分配不过来"。请检查邀请码的生效/失效日期。`);
+    }
+    $('#lastSnap').textContent = d.lastSnapshotAt + (d.latestSnapDate ? `（榜单日期 ${d.latestSnapDate}）` : '');
+    const statusLabel = { auto: '🕒 自动（按时间切换）', running: '✅ 强制进行中', notstarted: '⏳ 强制未开始', ended: '⛔ 强制已结束' };
+    $('#statusNow').textContent = statusLabel[d.activityStatus] || d.activityStatus;
+    loadSnapshotPreview(1);
+  }
+
+  // 活动开关：点击切换状态
+  document.querySelectorAll('[data-status]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const target = btn.dataset.status;
+      const names = { auto: '自动（按时间）', running: '强制进行中', notstarted: '强制未开始', ended: '强制已结束' };
+      if (!confirm(`确认将活动切换为「${names[target]}」？`)) return;
+      const d = await api('/api/admin/settings', { settings: { activity_status: target } });
+      if (guardAuth(d)) return;
+      showAlert($('#statusResult'), d.ok ? 'ok' : 'error', d.ok ? `已切换为「${names[target]}」` : d.msg);
+      loadOverview();
+    });
+  });
+
+  // 登录
+  async function tryEnter() {
+    const d = await api('/api/admin/overview');
+    if (d.ok) {
+      $('#loginCard').style.display = 'none';
+      $('#adminMain').style.display = 'block';
+      loadOverview();
+    }
+  }
+  $('#loginBtn').addEventListener('click', async () => {
+    hideAlert($('#loginAlert'));
+    const d = await api('/api/admin/login', { token: $('#tokenInput').value.trim() });
+    if (!d.ok) return showAlert($('#loginAlert'), 'error', d.msg);
+    $('#loginCard').style.display = 'none';
+    $('#adminMain').style.display = 'block';
+    loadOverview();
+  });
+  $('#tokenInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('#loginBtn').click(); });
+  tryEnter();
+
+  // Tab 切换
+  $('#tabs').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('[data-panel]').forEach(s => s.style.display = s.dataset.panel === btn.dataset.tab ? 'block' : 'none');
+    const loaders = { overview: loadOverview, activity: loadActivity, accounts: () => { loadAccounts(1); loadRecycle(); }, invcodes: () => loadInvCodes(1), shadow: loadShadows, rewards: loadRewards, settings: loadSettings, logs: loadLogs };
+    if (loaders[btn.dataset.tab]) loaders[btn.dataset.tab]();
+  });
+
+  // 立即刷新榜单：把 CC 已推入(待发布)的数据立即发布到前台并重算
+  $('#refreshBoardBtn').addEventListener('click', async () => {
+    const d = await api('/api/admin/activity/publish', {});
+    if (guardAuth(d)) return;
+    showAlert($('#snapResult'), d.ok ? 'ok' : 'error', d.ok ? `已刷新榜单（更新 ${d.updated || 0} 个邀请码，共 ${d.snapshotCount || 0} 条）` : d.msg);
+    loadSnapshotPreview(1);
+    loadOverview();
+  });
+
+  // 榜单快照预览（完整排行、分页、标注激励号）
+  let snapPage = 1;
+  async function loadSnapshotPreview(page) {
+    snapPage = page || 1;
+    const d = await api('/api/admin/snapshot?page=' + snapPage);
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#snapBody');
+    $('#snapTable').style.display = d.total ? 'table' : 'none';
+    $('#snapEmpty').style.display = d.total ? 'none' : 'block';
+    body.innerHTML = '';
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.rank}</td><td><code></code></td><td>${r.score}</td><td>${r.isShadow ? '<span class="tag warn">激励号</span>' : '<span class="tag ok">真实</span>'}</td>`;
+      tr.querySelector('code').textContent = r.code || '—';
+      body.appendChild(tr);
+    }
+    renderPager($('#snapPager'), d.total, d.page, d.size, loadSnapshotPreview);
+  }
+
+  // 通用分页控件
+  function renderPager(el, total, page, size, onGo) {
+    const pages = Math.max(1, Math.ceil(total / size));
+    if (total <= size) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    el.innerHTML = '';
+    const mk = (label, p, disabled) => {
+      const b = document.createElement('button');
+      b.className = 'btn small secondary'; b.textContent = label; b.disabled = disabled;
+      if (!disabled) b.addEventListener('click', () => onGo(p));
+      return b;
+    };
+    el.appendChild(mk('上一页', page - 1, page <= 1));
+    const info = document.createElement('span');
+    info.style.cssText = 'align-self:center;color:var(--muted);font-size:13px;padding:0 8px';
+    info.textContent = `第 ${page} / ${pages} 页 · 共 ${total} 条`;
+    el.appendChild(info);
+    el.appendChild(mk('下一页', page + 1, page >= pages));
+    // 跳页
+    const jin = document.createElement('input');
+    jin.type = 'number'; jin.min = 1; jin.max = pages; jin.placeholder = '页码';
+    jin.style.cssText = 'width:64px;padding:6px 8px';
+    const go = () => { const n = Math.min(pages, Math.max(1, parseInt(jin.value, 10) || 1)); onGo(n); };
+    jin.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    el.appendChild(jin);
+    const goBtn = document.createElement('button');
+    goBtn.className = 'btn small secondary'; goBtn.textContent = '跳转';
+    goBtn.addEventListener('click', go);
+    el.appendChild(goBtn);
+  }
+
+  // ==== 账号管理 ====
+  async function loadAccounts(page) {
+    const q = $('#acctSearch').value.trim();
+    const d = await api('/api/admin/accounts?page=' + (page || 1) + (q ? '&q=' + encodeURIComponent(q) : ''));
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#acctBody'); body.innerHTML = '';
+    $('#acctTable').style.display = d.rows.length ? 'table' : 'none';
+    $('#acctEmpty').style.display = d.rows.length ? 'none' : 'block';
+    d.rows.forEach((r, i) => {
+      const seq = (d.page - 1) * d.size + i + 1;
+      const ship = [r.recipient_name, r.phone, r.address].filter(Boolean).join(' / ') || '—';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${seq}</td><td></td><td></td><td></td><td></td><td>${r.score}</td>
+        <td style="white-space:nowrap">${r.code ? '<button class="btn small danger" data-act="delcode">删除邀请码</button> ' : ''}<button class="btn small danger" data-act="delacct">删除账号</button></td>`;
+      tr.children[1].textContent = r.uid;
+      tr.children[2].textContent = r.xhs_id || '—';
+      tr.children[3].textContent = ship;
+      tr.children[4].textContent = r.code || '（未发放）';
+      const dc = tr.querySelector('[data-act=delcode]');
+      if (dc) dc.addEventListener('click', () => doDelete({ kind: 'code', code: r.code }, `清除账号 ${r.uid.slice(0, 12)}… 的邀请码 ${r.code} 及邀请人数？（5天内可恢复）`, () => loadAccounts(d.page)));
+      tr.querySelector('[data-act=delacct]').addEventListener('click', () => doDelete({ kind: 'account', id: r.id }, `删除账号 ${r.uid}？将删除其全部关联信息（5天内可恢复）。`, () => loadAccounts(d.page)));
+      body.appendChild(tr);
+    });
+    renderPager($('#acctPager'), d.total, d.page, d.size, loadAccounts);
+  }
+  $('#acctSearchBtn').addEventListener('click', () => loadAccounts(1));
+  $('#acctSearch').addEventListener('keydown', e => { if (e.key === 'Enter') loadAccounts(1); });
+
+  // ==== 邀请码管理 ====
+  async function loadInvCodes(page) {
+    const q = $('#invSearch').value.trim();
+    const only = $('#invAssignedOnly').checked ? '&assigned=1' : '';
+    const d = await api('/api/admin/invite-codes?page=' + (page || 1) + (q ? '&q=' + encodeURIComponent(q) : '') + only);
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#invBody'); body.innerHTML = '';
+    $('#invTable').style.display = d.rows.length ? 'table' : 'none';
+    $('#invEmpty').style.display = d.rows.length ? 'none' : 'block';
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      const holder = r.shadow_id ? '（激励号占用）' : (r.holder_uid || '（未发放）');
+      tr.innerHTML = `<td>${r.code}</td><td>${r.score}</td><td></td>
+        <td>${r.holder_id && !r.shadow_id ? '<button class="btn small danger" data-act="clr">清除</button>' : ''}</td>`;
+      tr.children[2].textContent = holder;
+      const clr = tr.querySelector('[data-act=clr]');
+      if (clr) clr.addEventListener('click', () => doDelete({ kind: 'code', code: r.code }, `清除邀请码 ${r.code} 及其邀请人数？（5天内可恢复）`, () => loadInvCodes(d.page)));
+      body.appendChild(tr);
+    }
+    renderPager($('#invPager'), d.total, d.page, d.size, loadInvCodes);
+  }
+  $('#invSearchBtn').addEventListener('click', () => loadInvCodes(1));
+  $('#invSearch').addEventListener('keydown', e => { if (e.key === 'Enter') loadInvCodes(1); });
+
+  async function doDelete(payload, confirmMsg, after) {
+    if (!confirm(confirmMsg)) return;
+    const d = await api('/api/admin/delete', payload);
+    if (guardAuth(d)) return;
+    showAlert($('#globalAlert'), d.ok ? 'ok' : 'error', d.ok ? '已删除（可在账号管理·回收站 5天内恢复）' : d.msg);
+    if (d.ok && after) after();
+    loadRecycle();
+  }
+  async function doRestore(id) {
+    const d = await api('/api/admin/restore', { id });
+    if (guardAuth(d)) return;
+    showAlert($('#globalAlert'), d.ok ? 'ok' : 'error', d.ok ? '已恢复' : d.msg);
+    loadRecycle(); loadAccounts(1); loadInvCodes(1);
+  }
+  async function loadRecycle() {
+    const d = await api('/api/admin/deletions');
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#recycleBody'); body.innerHTML = '';
+    $('#recycleTable').style.display = d.rows.length ? 'table' : 'none';
+    $('#recycleEmpty').style.display = d.rows.length ? 'none' : 'block';
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.kind === 'account' ? '账号' : '邀请码'}</td><td></td><td>${r.deleted_at}</td><td>${r.days_left <= 0 ? '即将清除' : '约' + r.days_left + '天'}</td><td><button class="btn small" data-act="restore">恢复</button></td>`;
+      tr.children[1].textContent = r.label;
+      tr.querySelector('[data-act=restore]').addEventListener('click', () => doRestore(r.id));
+      body.appendChild(tr);
+    }
+  }
+  $('#recycleRefresh').addEventListener('click', loadRecycle);
+
+  // 文件内容读入内存缓冲，不渲染到页面（大文件塞进输入框会卡死浏览器）
+  const fileBuf = {};
+  function bindFile(fileId, bufKey, infoId) {
+    $('#' + fileId).addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (!f) { delete fileBuf[bufKey]; return; }
+      const r = new FileReader();
+      r.onload = () => {
+        fileBuf[bufKey] = r.result;
+        const lines = String(r.result).split('\n').filter(l => l.trim()).length;
+        const tip = `已加载：${f.name}（${lines} 行），点击导入`;
+        if (infoId) $('#' + infoId).textContent = tip;
+        else {
+          const ta = $('#' + bufKey);
+          if (ta) { ta.value = ''; ta.placeholder = tip; }
+        }
+      };
+      r.readAsText(f, 'utf-8');
+    });
+  }
+  // 取数据：优先手动粘贴的内容，否则用已加载的文件
+  function csvOf(bufKey) {
+    const ta = $('#' + bufKey);
+    return (ta && ta.value.trim()) || fileBuf[bufKey] || '';
+  }
+  bindFile('codesFile', 'codesCsv', 'codesFileInfo');
+  bindFile('syncFile', 'syncText');
+  bindFile('redFile', 'redText');
+  bindFile('devFile', 'devText');
+
+  // 导入邀请码（仅文件导入）
+  $('#codesImportBtn').addEventListener('click', async () => {
+    const csv = fileBuf['codesCsv'] || '';
+    if (!csv) return showAlert($('#codesResult'), 'error', '请先选择CSV文件');
+    const btn = $('#codesImportBtn');
+    btn.disabled = true; btn.textContent = '导入中…';
+    const d = await api('/api/admin/codes/import', { csv });
+    btn.disabled = false; btn.textContent = '导入';
+    if (guardAuth(d)) return;
+    if (!d.ok) return showAlert($('#codesResult'), 'error', d.msg);
+    let msg = `成功导入 ${d.added} 个邀请码`;
+    if (d.skipped) msg += `（${d.skipped} 个重复已跳过）`;
+    showAlert($('#codesResult'), 'ok', msg);
+    loadOverview();
+  });
+
+  // 同步激活数据（应急）
+  $('#syncImportBtn').addEventListener('click', async () => {
+    const csv = csvOf('syncText');
+    if (!csv) return showAlert($('#syncResult'), 'error', '请先选择文件或粘贴CSV内容');
+    const d = await api('/api/admin/sync/import', { csv });
+    if (guardAuth(d)) return;
+    if (!d.ok) return showAlert($('#syncResult'), 'error', d.msg);
+    let msg = `同步完成：更新 ${d.updated} 个邀请码`;
+    if (d.unknown.length) msg += `；未找到：${d.unknown.slice(0, 5).join(', ')}${d.unknown.length > 5 ? ' 等' + d.unknown.length + '个' : ''}`;
+    showAlert($('#syncResult'), d.unknown.length ? 'warn' : 'ok', msg);
+  });
+
+  // ---- 风控工作台 ----
+  async function riskImport(table, textId) {
+    const csv = csvOf(textId);
+    if (!csv) return showAlert($('#riskImportResult'), 'error', '请先选择文件或粘贴内容');
+    const d = await api('/api/admin/risk/import', { table, csv });
+    if (guardAuth(d)) return;
+    if (!d.ok) return showAlert($('#riskImportResult'), 'error', d.msg);
+    const msg = table === 'devices'
+      ? `表2导入完成：${d.rows} 行，${d.users} 个UID、${d.ips} 个IP、${d.devices} 个设备`
+      : `表1导入完成：${d.rows} 行兑换记录，涉及 ${d.codes} 个邀请码、${d.users} 个UID`;
+    showAlert($('#riskImportResult'), 'ok', msg);
+  }
+  $('#redImportBtn').addEventListener('click', () => riskImport('redemptions', 'redText'));
+  $('#devImportBtn').addEventListener('click', () => riskImport('devices', 'devText'));
+
+  function memberText(members) {
+    return members.map(m => `${m.user_id} → ${m.code}${m.nickname ? '（' + m.nickname + '）' : ''}`).join('；');
+  }
+  function renderExcluded(rows) {
+    const body = $('#excludedBody');
+    body.innerHTML = '';
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td></td><td></td><td>${r.created_at}</td><td><button class="btn small secondary" data-act="restore">恢复</button></td>`;
+      tr.children[0].textContent = r.user_id;
+      tr.children[1].textContent = r.reason;
+      tr.querySelector('[data-act=restore]').addEventListener('click', async () => {
+        await api('/api/admin/risk/exclude', { restore: r.user_id });
+        loadRiskReport();
+      });
+      body.appendChild(tr);
+    }
+  }
+  async function loadRiskReport() {
+    const d = await api('/api/admin/risk/report');
+    if (guardAuth(d)) return;
+    if (!d.ok) return showAlert($('#riskReportResult'), 'error', d.msg);
+    showAlert($('#riskReportResult'), 'ok',
+      `报告已生成：${d.stat.rows} 条兑换记录、${d.stat.codes} 个码、${d.stat.users} 个UID` +
+      (d.hasDevices ? '' : '（未导入表2，设备/IP聚集无法分析）') +
+      `；预警阈值：设备≥${d.thresholds.device}、IP≥${d.thresholds.ip}`);
+    const fill = (bodyId, list, emptyText) => {
+      const body = $('#' + bodyId);
+      body.innerHTML = '';
+      if (!list.length) { body.innerHTML = `<tr><td colspan="3" class="muted">${emptyText}</td></tr>`; return; }
+      for (const g of list) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td></td><td><b>${g.userCount}</b></td><td></td>`;
+        tr.children[0].textContent = g.key;
+        tr.children[2].textContent = memberText(g.members);
+        body.appendChild(tr);
+      }
+    };
+    fill('devClusterBody', d.deviceClusters, '未发现同设备多UID兑换 ✓');
+    fill('ipClusterBody', d.ipClusters, '未发现IP聚集 ✓');
+    const dupBody = $('#dupUserBody');
+    dupBody.innerHTML = '';
+    if (!d.dupUsers.length) dupBody.innerHTML = '<tr><td colspan="3" class="muted">未发现重复兑换 ✓</td></tr>';
+    for (const u of d.dupUsers) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td></td><td>${u.times}</td><td></td>`;
+      tr.children[0].textContent = u.user_id;
+      tr.children[2].textContent = u.code_list;
+      dupBody.appendChild(tr);
+    }
+    renderExcluded(d.excluded);
+    $('#riskReportBody').style.display = 'block';
+  }
+  $('#riskReportBtn').addEventListener('click', loadRiskReport);
+
+  $('#excludeBtn').addEventListener('click', async () => {
+    const d = await api('/api/admin/risk/exclude', {
+      userIds: $('#excludeIds').value,
+      reason: $('#excludeReason').value.trim()
+    });
+    if (guardAuth(d)) return;
+    showAlert($('#excludeResult'), d.ok ? 'ok' : 'error', d.ok ? `已剔除 ${d.count} 个UID，发布榜单后生效` : d.msg);
+    if (d.ok) { $('#excludeIds').value = ''; loadRiskReport(); }
+  });
+
+  $('#publishBtn').addEventListener('click', async () => {
+    const btn = $('#publishBtn');
+    btn.disabled = true; btn.textContent = '发布中…';
+    const d = await api('/api/admin/risk/publish', {});
+    btn.disabled = false; btn.textContent = '计算邀请人数并发布榜单';
+    if (guardAuth(d)) return;
+    showAlert($('#publishResult'), d.ok ? 'ok' : 'error',
+      d.ok ? `榜单已发布：净邀请合计 ${d.totalScore} 人，已剔除 ${d.excludedCount} 个违规UID，榜单 ${d.snapshotCount} 条` : d.msg);
+    loadOverview();
+  });
+
+  // 查询/改分
+  async function doSearch() {
+    const q = $('#searchInput').value.trim();
+    if (!q) return;
+    const d = await api('/api/admin/search?q=' + encodeURIComponent(q));
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#searchBody');
+    body.innerHTML = '';
+    $('#searchTable').style.display = d.rows.length ? 'table' : 'none';
+    $('#searchEmpty').style.display = d.rows.length ? 'none' : 'block';
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      const status = r.status === 'disqualified'
+        ? `<span class="tag bad">已取消</span>` : `<span class="tag ok">正常</span>`;
+      tr.innerHTML = `
+        <td></td><td></td><td></td><td></td>
+        <td>${r.activations ?? '—'}</td><td>${r.manual_delta ?? '—'}</td>
+        <td><b>${r.score ?? '—'}</b></td><td>${status}</td>
+        <td style="white-space:nowrap">
+          <button class="btn small secondary" data-act="adjust">修正</button>
+          <button class="btn small ${r.status === 'disqualified' ? 'secondary' : 'danger'}" data-act="dq">${r.status === 'disqualified' ? '恢复' : '取消资格'}</button>
+        </td>`;
+      tr.children[0].textContent = r.nickname;
+      tr.children[1].textContent = r.uid;
+      tr.children[2].textContent = r.xhs_id;
+      tr.children[3].textContent = r.code || '—';
+      tr.querySelector('[data-act=adjust]').addEventListener('click', async () => {
+        const delta = prompt(`给邀请码 ${r.code} 修正邀请人数（正数加、负数减）：`);
+        if (delta === null || delta.trim() === '') return;
+        const reason = prompt('修正原因（会记入操作日志）：');
+        if (!reason) return;
+        const res = await api('/api/admin/adjust', { code: r.code, delta: parseInt(delta, 10), reason });
+        showAlert($('#globalAlert'), res.ok ? 'ok' : 'error', res.ok ? '邀请人数已修正，生成榜单后生效' : res.msg);
+        doSearch();
+      });
+      tr.querySelector('[data-act=dq]').addEventListener('click', async () => {
+        const restore = r.status === 'disqualified';
+        let reason = '';
+        if (!restore) {
+          reason = prompt(`确认取消「${r.nickname}」的参赛资格？请输入原因（会记入操作日志）：`);
+          if (!reason) return;
+        } else if (!confirm(`恢复「${r.nickname}」的参赛资格？`)) return;
+        const res = await api('/api/admin/disqualify', { id: r.id, restore, reason });
+        showAlert($('#globalAlert'), res.ok ? 'ok' : 'error', res.ok ? '已更新，生成榜单后生效' : res.msg);
+        doSearch();
+      });
+      body.appendChild(tr);
+    }
+  }
+  $('#searchBtn').addEventListener('click', doSearch);
+  $('#searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  // 激励号
+  async function loadShadows() {
+    const d = await api('/api/admin/shadows');
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#shBody');
+    body.innerHTML = '';
+    for (const s of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${s.id}</td><td></td><td><code></code></td><td><b>${s.score}</b></td>
+        <td>${s.auto ? '<span class="tag ok">自动</span>' : '<span class="tag warn">手动</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn small secondary" data-act="score">设人数</button>
+          <button class="btn small secondary" data-act="auto">${s.auto ? '改为手动' : '改为自动'}</button>
+          <button class="btn small danger" data-act="del">删除</button>
+        </td>`;
+      tr.children[1].textContent = s.nickname;
+      tr.querySelector('code').textContent = s.code || '（未分配）';
+      tr.querySelector('[data-act=score]').addEventListener('click', async () => {
+        const v = prompt(`设置「${s.nickname}」的邀请人数：`, s.score);
+        if (v === null) return;
+        await api('/api/admin/shadows/update', { id: s.id, score: parseInt(v, 10) || 0 });
+        loadShadows();
+      });
+      tr.querySelector('[data-act=auto]').addEventListener('click', async () => {
+        await api('/api/admin/shadows/update', { id: s.id, auto: !s.auto });
+        loadShadows();
+      });
+      tr.querySelector('[data-act=del]').addEventListener('click', async () => {
+        if (!confirm(`删除激励号「${s.nickname}」？`)) return;
+        await api('/api/admin/shadows/update', { id: s.id, remove: true });
+        loadShadows();
+      });
+      body.appendChild(tr);
+    }
+  }
+  $('#shAddBtn').addEventListener('click', async () => {
+    hideAlert($('#shAlert'));
+    const d = await api('/api/admin/shadows', {
+      nickname: $('#shNick').value.trim(),
+      score: parseInt($('#shScore').value, 10) || 0,
+      auto: $('#shAuto').checked
+    });
+    if (guardAuth(d)) return;
+    if (!d.ok) return showAlert($('#shAlert'), 'error', d.msg);
+    $('#shNick').value = '';
+    showAlert($('#shAlert'), 'ok', '已新增');
+    loadShadows();
+  });
+
+  // 设置
+  async function loadSettings() {
+    const d = await api('/api/admin/settings');
+    if (guardAuth(d) || !d.ok) return;
+    const form = $('#settingsForm');
+    form.innerHTML = '';
+    for (const [key, label, type] of SETTING_FIELDS) {
+      const div = document.createElement('div');
+      div.innerHTML = `<label></label><input type="${type}" data-key="${key}">`;
+      div.querySelector('label').textContent = label;
+      div.querySelector('input').value = d.settings[key] ?? '';
+      form.appendChild(div);
+    }
+  }
+  $('#settingsSaveBtn').addEventListener('click', async () => {
+    const settings = {};
+    document.querySelectorAll('#settingsForm input').forEach(i => { settings[i.dataset.key] = i.value.trim(); });
+    const d = await api('/api/admin/settings', { settings });
+    if (guardAuth(d)) return;
+    showAlert($('#settingsAlert'), d.ok ? 'ok' : 'error', d.ok ? (d.changed.length ? `已保存：${d.changed.join(', ')}` : '没有变化') : d.msg);
+  });
+
+  // ==== 奖励设置 ====
+  function parseJsonArr(s) { try { const v = JSON.parse(s || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } }
+  function addRankRow(p) {
+    p = p || { from: '', to: '', label: '', prize: '' };
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="number" data-k="from" style="width:100%"></td>`
+      + `<td><input type="number" data-k="to" style="width:100%"></td>`
+      + `<td><input type="text" data-k="label" placeholder="🏆 冠军" style="width:100%"></td>`
+      + `<td><input type="text" data-k="prize" placeholder="3000 元愿望金" style="width:100%"></td>`
+      + `<td><button class="btn small danger" data-act="del">删</button></td>`;
+    tr.querySelector('[data-k=from]').value = p.from ?? '';
+    tr.querySelector('[data-k=to]').value = p.to ?? '';
+    tr.querySelector('[data-k=label]').value = p.label ?? '';
+    tr.querySelector('[data-k=prize]').value = p.prize ?? p.name ?? '';
+    tr.querySelector('[data-act=del]').addEventListener('click', () => tr.remove());
+    $('#rankPrizeBody').appendChild(tr);
+  }
+  function addMilestoneRow(m) {
+    m = m || { count: '', name: '' };
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="number" data-k="count" style="width:100%"></td>`
+      + `<td><input type="text" data-k="name" placeholder="3 个月会员" style="width:100%"></td>`
+      + `<td><button class="btn small danger" data-act="del">删</button></td>`;
+    tr.querySelector('[data-k=count]').value = m.count ?? m.score ?? '';
+    tr.querySelector('[data-k=name]').value = m.name ?? '';
+    tr.querySelector('[data-act=del]').addEventListener('click', () => tr.remove());
+    $('#milestoneBody').appendChild(tr);
+  }
+  async function loadRewards() {
+    const d = await api('/api/admin/settings');
+    if (guardAuth(d) || !d.ok) return;
+    $('#rankPrizeBody').innerHTML = '';
+    $('#milestoneBody').innerHTML = '';
+    parseJsonArr(d.settings.rank_prizes).forEach(addRankRow);
+    parseJsonArr(d.settings.milestones).forEach(addMilestoneRow);
+  }
+  $('#rankPrizeAdd').addEventListener('click', () => addRankRow());
+  $('#milestoneAdd').addEventListener('click', () => addMilestoneRow());
+  $('#rewardsSaveBtn').addEventListener('click', async () => {
+    const rank = [];
+    for (const tr of document.querySelectorAll('#rankPrizeBody tr')) {
+      const g = k => tr.querySelector(`[data-k=${k}]`).value.trim();
+      const from = parseInt(g('from'), 10), to = parseInt(g('to'), 10), prize = g('prize');
+      if (!from || !to || !prize) continue;
+      rank.push({ from, to, label: g('label'), prize });
+    }
+    const ms = [];
+    for (const tr of document.querySelectorAll('#milestoneBody tr')) {
+      const g = k => tr.querySelector(`[data-k=${k}]`).value.trim();
+      const count = parseInt(g('count'), 10), name = g('name');
+      if (!count || !name) continue;
+      ms.push({ count, name });
+    }
+    if (!rank.length && !ms.length) return showAlert($('#rewardsAlert'), 'error', '至少配置一档奖励');
+    const d = await api('/api/admin/settings', { settings: { rank_prizes: JSON.stringify(rank), milestones: JSON.stringify(ms) } });
+    if (guardAuth(d)) return;
+    showAlert($('#rewardsAlert'), d.ok ? 'ok' : 'error', d.ok ? `已上架：冲榜奖 ${rank.length} 档、达标奖 ${ms.length} 档（前台已同步）` : d.msg);
+  });
+
+  // ==== 活动管理 ====
+  function bjTime(ms) {
+    if (!ms) return '无(部署前)';
+    const d = new Date(ms + 8 * 3600 * 1000);
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+  }
+  async function loadActivity() {
+    const d = await api('/api/admin/settings');
+    if (guardAuth(d) || !d.ok) return;
+    const s = d.settings;
+    $('#actStatus').value = s.activity_status || 'auto';
+    $('#actStart').value = s.activity_start || '';
+    $('#actEnd').value = s.activity_end || '';
+    $('#actBatchIds').value = s.sync_batch_ids || '';
+    $('#actInterval').value = s.sync_interval_min || '60';
+    $('#actDelay').value = s.publish_delay_min || '30';
+    $('#actLastPull').textContent = s.last_pull_at || '尚未拉取';
+    $('#actLastPublish').textContent = s.last_publish_at || '尚未发布';
+    $('#actPendingReady').textContent = s.pending_ready_ts ? bjTime(parseInt(s.pending_ready_ts, 10)) + ' 自动发布' : '无待发布';
+  }
+  $('#actSaveBtn').addEventListener('click', async () => {
+    const d = await api('/api/admin/settings', { settings: { activity_status: $('#actStatus').value, activity_start: $('#actStart').value.trim(), activity_end: $('#actEnd').value.trim() } });
+    showAlert($('#actSaveResult'), d.ok ? 'ok' : 'error', d.ok ? '已保存活动开关/时间' : (d.msg || '保存失败'));
+  });
+  $('#actSaveBatchBtn').addEventListener('click', async () => {
+    const d = await api('/api/admin/settings', { settings: { sync_batch_ids: $('#actBatchIds').value.trim(), sync_interval_min: $('#actInterval').value, publish_delay_min: $('#actDelay').value } });
+    showAlert($('#actPullResult'), d.ok ? 'ok' : 'error', d.ok ? '已保存批次/频率' : (d.msg || '保存失败'));
+  });
+  $('#actPullBtn').addEventListener('click', async () => {
+    const btn = $('#actPullBtn'); btn.disabled = true; btn.textContent = '拉取中…';
+    const d = await api('/api/admin/activity/pull', { withDetail: true });
+    btn.disabled = false; btn.textContent = '立即拉取/导入';
+    if (guardAuth(d)) return;
+    if (d.ok === false) return showAlert($('#actPullResult'), 'error', d.msg || '拉取失败');
+    const b = (d.batches || []).map(x => `批次${x.batchId}：${x.totalCodes}码/${x.totalRedemptions}兑换`).join('；');
+    showAlert($('#actPullResult'), d.errors && d.errors.length ? 'warn' : 'ok', `拉取完成 ${b}` + (d.errors && d.errors.length ? `；告警${d.errors.length}条(见日志)` : '') + '。已排期错峰发布。');
+    loadActivity();
+  });
+  $('#actPublishBtn').addEventListener('click', async () => {
+    const d = await api('/api/admin/activity/publish', {});
+    if (guardAuth(d)) return;
+    showAlert($('#actPullResult'), 'ok', `已发布到前台：更新 ${d.updated} 个码，榜单 ${d.snapshotCount} 条`);
+    loadActivity();
+  });
+  $('#actCodesBtn').addEventListener('click', () => loadActCodes(1));
+  async function loadActCodes(page) {
+    const bid = $('#actCodeFilter').value.trim();
+    const qs = '?page=' + (page || 1) + (bid ? '&batchId=' + encodeURIComponent(bid) : '');
+    const d = await api('/api/admin/activity/codes' + qs);
+    if (guardAuth(d) || !d.ok) return;
+    $('#actCodesTotalAll').textContent = d.totalAll + ' 个';
+    $('#actCodesFiltered').textContent = bid ? `（当前批次 ${d.total} 个）` : '';
+    const body = $('#actCodesBody'); body.innerHTML = '';
+    $('#actCodesTable').style.display = d.rows.length ? 'table' : 'none';
+    $('#actCodesEmpty').style.display = d.rows.length ? 'none' : 'block';
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.code}</td><td>${r.batch_id||''}</td><td><b>${r.pending==null?'—':r.pending}</b></td><td>${r.activations}</td><td>${r.manual_delta}</td><td>${r.max_redemptions==null?'':r.max_redemptions}</td><td><button class="btn small secondary" data-code="${r.code}">明细</button></td>`;
+      tr.querySelector('button').addEventListener('click', () => showDetail(r.code));
+      body.appendChild(tr);
+    }
+    renderPager($('#actCodesPager'), d.total, d.page, d.size, loadActCodes);
+  }
+  async function showDetail(code) {
+    $('#actDetailModal').style.display = 'block';
+    $('#actDetailCode').textContent = code;
+    $('#actDetailNote').textContent = '加载中…';
+    $('#actDetailBody').innerHTML = '';
+    const d = await api('/api/admin/activity/code-detail?code=' + encodeURIComponent(code) + '&live=1');
+    if (!d.ok) { $('#actDetailNote').textContent = '加载失败'; return; }
+    $('#actDetailNote').textContent = `共 ${d.rows.length} 条兑换` + (d.liveError ? `（实时回源失败：${d.liveError}）` : '');
+    const body = $('#actDetailBody');
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${(r.user_id||'').slice(0,18)}</td><td>${r.ip||'—'}</td><td>${(r.device||'—').slice(0,18)}</td><td>${bjTime(r.redeemed_at)}</td>`;
+      body.appendChild(tr);
+    }
+  }
+  $('#actDetailClose').addEventListener('click', () => { $('#actDetailModal').style.display = 'none'; });
+
+  async function loadLeaderboard() {
+    const d = await api('/api/admin/activity/leaderboard');
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#actLbBody'); body.innerHTML = '';
+    $('#actLbTable').style.display = d.rows.length ? 'table' : 'none';
+    if (!d.rows.length) { showAlert($('#actLbResult'), 'info', '暂无兑换数据，先到上面「立即拉取」。'); return; }
+    hideAlert($('#actLbResult'));
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      const warn = r.viol > 0
+        ? `<span class="tag bad">⚠ ${r.viol}笔可疑</span>` + (r.badIps.length ? ` IP:${r.badIps.join(',')}` : '') + (r.badDevs.length ? ` 设备:${r.badDevs.map(x=>x.slice(0,8)).join(',')}` : '')
+        : '<span class="tag ok">正常</span>';
+      tr.innerHTML = `<td>${r.rank}</td><td>${r.code}</td><td>${r.nickname||'—'}</td><td>${r.redeemed}</td><td>${r.manual_delta}</td><td><b>${r.score}</b></td><td>${warn}</td><td><button class="btn small secondary" data-code="${r.code}">调分</button></td>`;
+      if (r.viol > 0) tr.style.background = '#fff1f0';
+      tr.querySelector('button').addEventListener('click', async () => {
+        const delta = prompt(`给码 ${r.code} 调整分数（正数加、负数扣违规分），当前实际分 ${r.score}：`, '-1');
+        if (delta === null || delta.trim() === '') return;
+        const reason = prompt('调整原因（记入操作日志）：', '违规刷码扣分');
+        if (!reason) return;
+        const res = await api('/api/admin/adjust', { code: r.code, delta: parseInt(delta, 10), reason });
+        showAlert($('#actLbResult'), res.ok ? 'ok' : 'error', res.ok ? `已调整 ${r.code}，发布后前台生效` : (res.msg || '失败'));
+        loadLeaderboard();
+      });
+      body.appendChild(tr);
+    }
+  }
+  $('#actLbBtn').addEventListener('click', loadLeaderboard);
+
+  async function loadLogs() {
+    const d = await api('/api/admin/logs');
+    if (guardAuth(d) || !d.ok) return;
+    const body = $('#logBody');
+    body.innerHTML = '';
+    for (const r of d.rows) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.created_at}</td><td>${r.action}</td><td></td>`;
+      tr.children[2].textContent = r.detail;
+      body.appendChild(tr);
+    }
+  }
+})();
+</script>
+</body>
+</html>

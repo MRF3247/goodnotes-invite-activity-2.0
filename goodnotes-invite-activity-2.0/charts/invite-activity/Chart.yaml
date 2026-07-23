@@ -1,0 +1,7 @@
+apiVersion: v2
+name: invite-activity
+description: Goodnotes极速版 邀请活动 — 单进程 Node.js + node:sqlite（有状态，单副本）
+type: application
+version: 0.1.0
+# appVersion 跟随镜像 tag；真实部署时用 values 覆盖 image.tag
+appVersion: "v1.0-20260707a"

@@ -1,0 +1,12 @@
+{
+  "name": "goodnotes-invite-activity",
+  "version": "1.0.0",
+  "description": "Goodnotes极速版 邀请活动：登记 / 排行榜 / 后台",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
